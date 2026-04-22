@@ -19,9 +19,9 @@
   ],
   "support": {
     "email": "hello@pixelwerft.ch",
-    "issues": "https://github.com/pixelwerft/craft-user-audit/issues",
-    "source": "https://github.com/pixelwerft/craft-user-audit",
-    "docs": "https://github.com/pixelwerft/craft-user-audit/blob/main/README.md"
+    "issues": "https://github.com/pixelwerft/user-audit/issues",
+    "source": "https://github.com/pixelwerft/user-audit",
+    "docs": "https://github.com/pixelwerft/user-audit/blob/main/README.md"
   },
   "authors": [
     {
@@ -43,8 +43,8 @@
     "name": "User Audit",
     "developer": "pixelwerft",
     "developerUrl": "https://pixelwerft.ch",
-    "documentationUrl": "https://github.com/pixelwerft/craft-user-audit/blob/main/README.md",
-    "changelogUrl": "https://raw.githubusercontent.com/pixelwerft/craft-user-audit/main/CHANGELOG.md",
+    "documentationUrl": "https://github.com/pixelwerft/user-audit/blob/main/README.md",
+    "changelogUrl": "https://raw.githubusercontent.com/pixelwerft/user-audit/main/CHANGELOG.md",
     "class": "pixelwerft\\useraudit\\UserAudit"
   },
   "config": {
