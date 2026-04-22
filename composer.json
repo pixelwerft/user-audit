@@ -1,0 +1,60 @@
+{
+  "name": "pixelwerft/user-audit",
+  "description": "Audit log for user activity in Craft: login, logout, failed logins and custom events with device, browser, IP, client-type and group metadata.",
+  "type": "craft-plugin",
+  "license": "MIT",
+  "keywords": [
+    "craft",
+    "cms",
+    "craftcms",
+    "craft-plugin",
+    "audit",
+    "audit-log",
+    "activity-log",
+    "login",
+    "security",
+    "gdpr",
+    "compliance",
+    "user-activity"
+  ],
+  "support": {
+    "email": "hello@pixelwerft.ch",
+    "issues": "https://github.com/pixelwerft/craft-user-audit/issues",
+    "source": "https://github.com/pixelwerft/craft-user-audit",
+    "docs": "https://github.com/pixelwerft/craft-user-audit/blob/main/README.md"
+  },
+  "authors": [
+    {
+      "name": "pixelwerft",
+      "homepage": "https://pixelwerft.ch"
+    }
+  ],
+  "require": {
+    "php": ">=8.2",
+    "craftcms/cms": "^5.1.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "pixelwerft\\useraudit\\": "src/"
+    }
+  },
+  "extra": {
+    "handle": "user-audit",
+    "name": "User Audit",
+    "developer": "pixelwerft",
+    "developerUrl": "https://pixelwerft.ch",
+    "documentationUrl": "https://github.com/pixelwerft/craft-user-audit/blob/main/README.md",
+    "changelogUrl": "https://raw.githubusercontent.com/pixelwerft/craft-user-audit/main/CHANGELOG.md",
+    "class": "pixelwerft\\useraudit\\UserAudit"
+  },
+  "config": {
+    "sort-packages": true,
+    "platform": {
+      "php": "8.2"
+    },
+    "allow-plugins": {
+      "yiisoft/yii2-composer": true,
+      "craftcms/plugin-installer": true
+    }
+  }
+}
