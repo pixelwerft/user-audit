@@ -1,0 +1,42 @@
+<div class="user-audit-widget" style="padding: 0.5rem 0;">
+  <div style="display: flex; gap: 1.5rem; margin-bottom: 1rem;">
+    <div>
+      <div class="light" style="font-size: 0.75rem; text-transform: uppercase;">{{ 'Logins'|t('user-audit') }}</div>
+      <div style="font-size: 1.75rem; font-weight: 600;">{{ loginCount }}</div>
+    </div>
+    <div>
+      <div class="light" style="font-size: 0.75rem; text-transform: uppercase;">{{ 'Logouts'|t('user-audit') }}</div>
+      <div style="font-size: 1.75rem; font-weight: 600;">{{ logoutCount }}</div>
+    </div>
+    <div>
+      <div class="light" style="font-size: 0.75rem; text-transform: uppercase;">{{ 'Failed'|t('user-audit') }}</div>
+      <div style="font-size: 1.75rem; font-weight: 600; {% if failedCount > 10 %}color: #d0021b;{% endif %}">{{ failedCount }}</div>
+    </div>
+  </div>
+
+  {% if topFailIps|length > 0 %}
+    <div class="light" style="font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.25rem;">
+      {{ 'Top-IPs (Failed)'|t('user-audit') }}
+    </div>
+    <table class="data fullwidth">
+      <thead>
+        <tr>
+          <th>{{ 'IP'|t('user-audit') }}</th>
+          <th style="text-align: right;">{{ 'Attempts'|t('user-audit') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in topFailIps %}
+          <tr>
+            <td><code>{{ row.ip }}</code></td>
+            <td style="text-align: right;">{{ row.c }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  <div style="margin-top: 0.75rem;">
+    <a class="go" href="{{ cpUrl('user-audit') }}">{{ 'Full log'|t('user-audit') }}</a>
+  </div>
+</div>
