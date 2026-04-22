@@ -1,0 +1,201 @@
+{% extends '_layouts/cp' %}
+
+{% set title = 'User Audit'|t('user-audit') %}
+{% set selectedSubnavItem = 'index' %}
+
+{% set crumbs = [
+  { label: 'Plugins'|t('app'), url: cpUrl('settings/plugins') }
+] %}
+
+{% block content %}
+
+<div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;">
+  <a href="{{ cpUrl('user-audit') }}" class="btn active">{{ 'Full Log'|t('user-audit') }}</a>
+  <a href="{{ cpUrl('user-audit/active') }}" class="btn">{{ 'Active Sessions'|t('user-audit') }}</a>
+  <div style="margin-left: auto;">
+    <a href="{{ cpUrl('settings/plugins/user-audit') }}" class="btn settings icon" title="{{ 'Settings'|t('user-audit') }}">
+      {{ 'Settings'|t('user-audit') }}
+    </a>
+  </div>
+</div>
+
+<div class="field">
+  <form id="user-audit-filter" method="get" action="{{ cpUrl('user-audit') }}">
+    <div class="flex">
+      <div class="flex-grow">
+        <input
+          type="text"
+          name="q"
+          value="{{ q }}"
+          placeholder="{{ 'Search by email / group / IP / browser / OS / device / event'|t('user-audit') }}"
+          class="text fullwidth"
+          data-ua-live-input
+          autocomplete="off"
+        >
+      </div>
+      <div>
+        <div class="select">
+          <select name="event" data-ua-live-select>
+            <option value="">{{ 'All events'|t('user-audit') }}</option>
+            <option value="login" {% if eventType == 'login' %}selected{% endif %}>login</option>
+            <option value="logout" {% if eventType == 'logout' %}selected{% endif %}>logout</option>
+            <option value="login_failed" {% if eventType == 'login_failed' %}selected{% endif %}>login_failed</option>
+            <option value="login_blocked" {% if eventType == 'login_blocked' %}selected{% endif %}>login_blocked</option>
+            <option value="session_expired" {% if eventType == 'session_expired' %}selected{% endif %}>session_expired</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <div class="select">
+          <select name="context" data-ua-live-select>
+            <option value="">{{ 'All contexts'|t('user-audit') }}</option>
+            <option value="cp" {% if context == 'cp' %}selected{% endif %}>{{ 'CP (Backend)'|t('user-audit') }}</option>
+            <option value="fe" {% if context == 'fe' %}selected{% endif %}>{{ 'Frontend'|t('user-audit') }}</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <div class="select">
+          <select name="client" data-ua-live-select>
+            <option value="">{{ 'All clients'|t('user-audit') }}</option>
+            <option value="pwa" {% if client == 'pwa' %}selected{% endif %}>PWA</option>
+            <option value="browser" {% if client == 'browser' %}selected{% endif %}>{{ 'Browser'|t('user-audit') }}</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <button type="submit" class="btn submit">{{ 'Filter'|t('user-audit') }}</button>
+      </div>
+      {% if q or eventType or context or client %}
+        <div>
+          <a href="{{ cpUrl('user-audit') }}" class="btn">{{ 'Reset'|t('user-audit') }}</a>
+        </div>
+      {% endif %}
+      <div>
+        <a href="{{ cpUrl('user-audit/export', { q: q, event: eventType, context: context, client: client }) }}"
+           class="btn">
+          {{ 'Export CSV'|t('user-audit') }}
+        </a>
+      </div>
+    </div>
+  </form>
+</div>
+
+<div class="tableview">
+  <table class="data fullwidth">
+    <thead>
+      <tr>
+        <th>{{ 'Time'|t('user-audit') }}</th>
+        <th>{{ 'Event'|t('user-audit') }}</th>
+        <th>{{ 'Context'|t('user-audit') }}</th>
+        <th>{{ 'Client'|t('user-audit') }}</th>
+        <th>{{ 'User'|t('user-audit') }}</th>
+        <th>{{ 'Email / Login'|t('user-audit') }}</th>
+        <th>{{ 'Groups'|t('user-audit') }}</th>
+        <th>{{ 'IP'|t('user-audit') }}</th>
+        <th>{{ 'Device'|t('user-audit') }}</th>
+        <th>{{ 'OS'|t('user-audit') }}</th>
+        <th>{{ 'Browser'|t('user-audit') }}</th>
+        <th>{{ 'Reason'|t('user-audit') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        <tr>
+          <td><span class="light">{{ row.dateCreated|date('Y-m-d H:i:s') }}</span></td>
+          <td><code>{{ row.eventType }}</code></td>
+          <td>
+            {% if row.context == 'cp' %}
+              <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #e0e4ff; font-size: 0.7rem;">CP</span>
+            {% elseif row.context == 'fe' %}
+              <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #e0ffe4; font-size: 0.7rem;">FE</span>
+            {% else %}
+              <span class="light">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if row.client == 'pwa' %}
+              <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #ffe8cc; font-size: 0.7rem;">PWA</span>
+            {% elseif row.client == 'browser' %}
+              <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #f0f0f0; font-size: 0.7rem;">{{ 'Browser'|t('user-audit') }}</span>
+            {% else %}
+              <span class="light">—</span>
+            {% endif %}
+          </td>
+          <td>{{ row.userId ?: '—' }}</td>
+          <td>{{ row.email ?: '—' }}</td>
+          <td>
+            {% if row.userGroups %}
+              {% for g in row.userGroups|split(',') %}
+                <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #eef; font-size: 0.7rem; margin-right: 0.15rem;">{{ g }}</span>
+              {% endfor %}
+            {% else %}
+              <span class="light">—</span>
+            {% endif %}
+          </td>
+          <td>{{ row.ipAddress ?: '—' }}</td>
+          <td>{{ row.deviceType ?: '—' }}</td>
+          <td>{{ row.osName ?: '—' }}{% if row.osVersion %} {{ row.osVersion }}{% endif %}</td>
+          <td>{{ row.browserName ?: '—' }}{% if row.browserVersion %} {{ row.browserVersion }}{% endif %}</td>
+          <td>{{ row.failureReason ?: '—' }}</td>
+        </tr>
+      {% else %}
+        <tr>
+          <td colspan="12" class="centeralign light">
+            {{ 'No entries yet.'|t('user-audit') }}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if pageCount > 1 %}
+  <nav class="pagination" style="margin-top: 1rem;">
+    {% set baseQuery = { q: q, event: eventType, context: context, client: client } %}
+    {% if page > 1 %}
+      <a class="btn" href="{{ cpUrl('user-audit', baseQuery|merge({ page: page - 1 })) }}">&larr; {{ 'Previous'|t('user-audit') }}</a>
+    {% endif %}
+    <span class="light" style="margin: 0 0.75rem;">
+      {{ 'Page %s of %s'|t('user-audit')|format(page, pageCount) }} &middot;
+      {{ '%s entries'|t('user-audit')|format(total) }}
+    </span>
+    {% if page < pageCount %}
+      <a class="btn" href="{{ cpUrl('user-audit', baseQuery|merge({ page: page + 1 })) }}">{{ 'Next'|t('user-audit') }} &rarr;</a>
+    {% endif %}
+  </nav>
+{% endif %}
+
+{% js %}
+(function () {
+  // Live-Filter: Select-Wechsel submitted sofort, Text-Input mit Debounce
+  // (350 ms) und Mindestlänge 2 Zeichen. 0 Zeichen submitten ebenfalls,
+  // damit das Zurücksetzen des Suchfelds die Ergebnisse wieder öffnet.
+  var form = document.getElementById('user-audit-filter');
+  if (!form) return;
+
+  var submit = function () {
+    // page-Param fallenlassen, damit wir nach einer Filteränderung nicht
+    // auf Seite 42 einer neuen Ergebnismenge landen.
+    var pageInput = form.querySelector('input[name="page"]');
+    if (pageInput) pageInput.remove();
+    form.submit();
+  };
+
+  form.querySelectorAll('[data-ua-live-select]').forEach(function (el) {
+    el.addEventListener('change', submit);
+  });
+
+  var t = null;
+  form.querySelectorAll('[data-ua-live-input]').forEach(function (el) {
+    el.addEventListener('input', function () {
+      if (t) clearTimeout(t);
+      var v = el.value.trim();
+      if (v.length === 1) return; // Einzelzeichen ignorieren, zu rauschig.
+      t = setTimeout(submit, 350);
+    });
+  });
+})();
+{% endjs %}
+
+{% endblock %}

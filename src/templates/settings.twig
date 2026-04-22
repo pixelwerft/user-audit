@@ -1,0 +1,124 @@
+{% import '_includes/forms' as forms %}
+
+<h2>{{ 'What gets recorded'|t('user-audit') }}</h2>
+<p class="light">
+  {{ 'Controls which events are written to the activity log. Changes take effect immediately — existing entries are kept. Custom events from other modules (log() with a custom eventType) are not affected.'|t('user-audit') }}
+</p>
+
+{{ forms.lightswitchField({
+  label: 'Record control panel events'|t('user-audit'),
+  instructions: 'Admin logins via /admin.'|t('user-audit'),
+  id: 'recordCpEvents',
+  name: 'recordCpEvents',
+  on: settings.recordCpEvents,
+}) }}
+
+{{ forms.lightswitchField({
+  label: 'Record frontend events'|t('user-audit'),
+  instructions: 'Logins from the PWA or public site.'|t('user-audit'),
+  id: 'recordFrontendEvents',
+  name: 'recordFrontendEvents',
+  on: settings.recordFrontendEvents,
+}) }}
+
+{{ forms.lightswitchField({
+  label: 'Record client type (PWA vs. browser)'|t('user-audit'),
+  instructions: 'Reads the X-Reest-Client header on login/logout requests and stores pwa or browser. Turn off to keep the column NULL and hide the client filter.'|t('user-audit'),
+  id: 'recordClientType',
+  name: 'recordClientType',
+  on: settings.recordClientType,
+}) }}
+
+<hr>
+
+<h2>{{ 'Retention'|t('user-audit') }}</h2>
+
+{{ forms.textField({
+  label: 'Retention (days)'|t('user-audit'),
+  instructions: 'Entries older than N days are deleted during the purge run. 0 = never delete.'|t('user-audit'),
+  id: 'retentionDays',
+  name: 'retentionDays',
+  type: 'number',
+  value: settings.retentionDays,
+}) }}
+
+<p class="light">
+  {{ 'Manual run:'|t('user-audit') }}
+</p>
+<pre>./craft user-audit/purge/run
+./craft user-audit/purge/run --dry-run=1</pre>
+
+<p class="light">
+  {{ 'Recommended cron (every 30 minutes):'|t('user-audit') }}
+</p>
+<pre>*/30 * * * * cd /path/to/craft && php craft user-audit/purge/run &gt;/dev/null 2&gt;&amp;1</pre>
+
+<hr>
+
+<h2>{{ 'Throttling'|t('user-audit') }}</h2>
+<p class="light">
+  {{ 'Blocks login requests by IP or email when too many login_failed entries fall within the window. Hitting the limit returns HTTP 429 and creates a login_blocked audit entry.'|t('user-audit') }}
+</p>
+
+{{ forms.lightswitchField({
+  label: 'Enable throttling'|t('user-audit'),
+  id: 'throttlingEnabled',
+  name: 'throttlingEnabled',
+  on: settings.throttlingEnabled,
+}) }}
+
+{{ forms.textField({
+  label: 'Failures per IP'|t('user-audit'),
+  instructions: 'How many failed logins per IP are allowed within the window. 0 = no IP limit.'|t('user-audit'),
+  id: 'failsPerIp',
+  name: 'failsPerIp',
+  type: 'number',
+  value: settings.failsPerIp,
+}) }}
+
+{{ forms.textField({
+  label: 'Failures per email/login'|t('user-audit'),
+  instructions: 'How many failed logins per login name are allowed within the window. 0 = no email limit.'|t('user-audit'),
+  id: 'failsPerEmail',
+  name: 'failsPerEmail',
+  type: 'number',
+  value: settings.failsPerEmail,
+}) }}
+
+{{ forms.textField({
+  label: 'Window (minutes)'|t('user-audit'),
+  instructions: 'Sliding window. Older failures outside this range no longer count.'|t('user-audit'),
+  id: 'windowMinutes',
+  name: 'windowMinutes',
+  type: 'number',
+  value: settings.windowMinutes,
+}) }}
+
+<p class="light">
+  {{ 'Manual unblock:'|t('user-audit') }}
+</p>
+<pre>./craft user-audit/throttle/reset --ip=1.2.3.4
+./craft user-audit/throttle/reset --email=foo@bar.ch</pre>
+
+<hr>
+
+<h2>{{ 'New-location alerts'|t('user-audit') }}</h2>
+<p class="light">
+  {{ 'Sends the user an email when someone logs in from an IP that has not been seen for them within the lookback period. Helps detect compromised accounts early.'|t('user-audit') }}
+</p>
+
+{{ forms.lightswitchField({
+  label: 'Send new-location emails'|t('user-audit'),
+  id: 'newLocationAlertsEnabled',
+  name: 'newLocationAlertsEnabled',
+  on: settings.newLocationAlertsEnabled,
+}) }}
+
+{{ forms.textField({
+  label: 'Lookback (days)'|t('user-audit'),
+  instructions: 'How far back to look when deciding whether an IP is new. Larger values reduce false positives — but a stolen account will take longer to detect.'|t('user-audit'),
+  id: 'newLocationLookbackDays',
+  name: 'newLocationLookbackDays',
+  type: 'number',
+  value: settings.newLocationLookbackDays,
+}) }}

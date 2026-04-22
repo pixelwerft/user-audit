@@ -1,0 +1,90 @@
+{% extends '_layouts/cp' %}
+
+{% set title = 'Active Sessions'|t('user-audit') %}
+
+{% set crumbs = [
+  { label: 'User Audit'|t('user-audit'), url: cpUrl('user-audit') }
+] %}
+
+{% block content %}
+
+<div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;">
+  <a href="{{ cpUrl('user-audit') }}" class="btn">{{ 'Full Log'|t('user-audit') }}</a>
+  <a href="{{ cpUrl('user-audit/active') }}" class="btn active">{{ 'Active Sessions'|t('user-audit') }}</a>
+  <div style="margin-left: auto;">
+    <a href="{{ cpUrl('settings/plugins/user-audit') }}" class="btn settings icon" title="{{ 'Settings'|t('user-audit') }}">
+      {{ 'Settings'|t('user-audit') }}
+    </a>
+  </div>
+</div>
+
+<p class="light">
+  {{ 'Users whose latest login within the last %s hours has not been followed by a logout or session-expiry.'|t('user-audit')|format(windowHours) }}
+</p>
+
+<div class="tableview">
+  <table class="data fullwidth">
+    <thead>
+      <tr>
+        <th>{{ 'Since'|t('user-audit') }}</th>
+        <th>{{ 'Context'|t('user-audit') }}</th>
+        <th>{{ 'Client'|t('user-audit') }}</th>
+        <th>{{ 'User'|t('user-audit') }}</th>
+        <th>{{ 'Email'|t('user-audit') }}</th>
+        <th>{{ 'Groups'|t('user-audit') }}</th>
+        <th>{{ 'IP'|t('user-audit') }}</th>
+        <th>{{ 'Device'|t('user-audit') }}</th>
+        <th>{{ 'OS'|t('user-audit') }}</th>
+        <th>{{ 'Browser'|t('user-audit') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        <tr>
+          <td><span class="light">{{ row.dateCreated|date('Y-m-d H:i:s') }}</span></td>
+          <td>
+            {% if row.context == 'cp' %}
+              <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #e0e4ff; font-size: 0.7rem;">CP</span>
+            {% elseif row.context == 'fe' %}
+              <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #e0ffe4; font-size: 0.7rem;">FE</span>
+            {% else %}
+              <span class="light">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if row.client == 'pwa' %}
+              <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #ffe8cc; font-size: 0.7rem;">PWA</span>
+            {% elseif row.client == 'browser' %}
+              <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #f0f0f0; font-size: 0.7rem;">{{ 'Browser'|t('user-audit') }}</span>
+            {% else %}
+              <span class="light">—</span>
+            {% endif %}
+          </td>
+          <td>{{ row.userId ?: '—' }}</td>
+          <td>{{ row.email ?: '—' }}</td>
+          <td>
+            {% if row.userGroups %}
+              {% for g in row.userGroups|split(',') %}
+                <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #eef; font-size: 0.7rem; margin-right: 0.15rem;">{{ g }}</span>
+              {% endfor %}
+            {% else %}
+              <span class="light">—</span>
+            {% endif %}
+          </td>
+          <td>{{ row.ipAddress ?: '—' }}</td>
+          <td>{{ row.deviceType ?: '—' }}</td>
+          <td>{{ row.osName ?: '—' }}{% if row.osVersion %} {{ row.osVersion }}{% endif %}</td>
+          <td>{{ row.browserName ?: '—' }}{% if row.browserVersion %} {{ row.browserVersion }}{% endif %}</td>
+        </tr>
+      {% else %}
+        <tr>
+          <td colspan="10" class="centeralign light">
+            {{ 'No active sessions found.'|t('user-audit') }}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}
