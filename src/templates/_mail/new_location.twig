@@ -1,0 +1,25 @@
+{% apply spaceless %}
+<p>Hallo {{ user.fullName ?: user.friendlyName ?: user.email }},</p>
+
+<p>
+  Es gab gerade einen Login auf deinem Konto von einem Ort oder Gerät,
+  das wir in den letzten {{ lookbackDays }} Tagen noch nicht gesehen haben.
+</p>
+
+<ul style="list-style: none; padding: 0;">
+  <li><strong>Zeit:</strong> {{ now|date('Y-m-d H:i:s') }}</li>
+  <li><strong>IP:</strong> {{ ip ?: '—' }}</li>
+  <li><strong>Gerät:</strong> {{ deviceType|default('—') }}</li>
+  <li><strong>Betriebssystem:</strong> {{ osName|default('—') }}{% if osVersion %} {{ osVersion }}{% endif %}</li>
+  <li><strong>Browser:</strong> {{ browserName|default('—') }}{% if browserVersion %} {{ browserVersion }}{% endif %}</li>
+</ul>
+
+<p>
+  Warst du das nicht? Dann ändere bitte sofort dein Passwort
+  und melde dich bei der IT.
+</p>
+
+<p>
+  <a href="{{ siteUrl }}">{{ siteUrl }}</a>
+</p>
+{% endapply %}
