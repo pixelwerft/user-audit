@@ -40,6 +40,13 @@ break in?* — without stitching it together from three different log files.
   user their own login history (the PWA in this project ships a `/konto` view
   consuming it).
 
+## Screenshots
+
+| | |
+| --- | --- |
+| ![Logs view](src/resources/screenshots/user-audit-overview.png) | ![Settings](src/resources/screenshots/user-audit-settings.png) |
+| Filterable, sortable log index. | Plugin settings with access, retention, throttling and new-location alerts. |
+
 ## Installation
 
 Via Craft's plugin store:
@@ -76,6 +83,10 @@ Available under *Settings → Plugins → User Audit*:
 | Window (minutes) | 15 | Sliding window for the throttling counter |
 | New-location alerts | off | Send email when a user logs in from a new IP |
 | Lookback (days) | 90 | How far back an IP counts as "seen" |
+
+A **Reset to defaults** button at the bottom of the settings page refills
+every field with its built-in default. Nothing is written until you click
+*Save*, so it also works as a preview of the factory configuration.
 
 ## Console commands
 
@@ -174,6 +185,12 @@ addresses, you want the list visible in the log.
 Table: `{{%user_activity_log}}`. Schema is owned by the plugin — no FKs
 outside of a `SET NULL` to `{{%users}}` so audit rows survive user deletion
 (important for compliance).
+
+## Releases
+
+Versions are cut from git tags (`vX.Y.Z`). The Craft plugin store reads
+the changelog from [`CHANGELOG.md`](CHANGELOG.md) via the raw URL
+declared in [`composer.json`](composer.json) → `extra.changelogUrl`.
 
 ## License
 
