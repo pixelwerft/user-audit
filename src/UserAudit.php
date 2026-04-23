@@ -330,9 +330,15 @@ class UserAudit extends Plugin
 
                 $event->navItems[] = [
                     'label' => Craft::t('user-audit', 'User Audit'),
-                    // Main item target = Logs, so a click on the top
-                    // nav item deterministically lands on the log list.
-                    'url' => 'user-audit/logs',
+                    // Parent URL is the plugin root, not /logs. Craft
+                    // picks "active parent" by prefix-matching the
+                    // current path against this URL, so both
+                    // /user-audit/logs and /user-audit/monitor count
+                    // as inside the section and keep the subnav open.
+                    // The root URL itself is routed to the Logs
+                    // action via registerCpRoutes(), so clicking the
+                    // main nav item still lands on Logs.
+                    'url' => 'user-audit',
                     'icon' => '@pixelwerft/useraudit/icon-mask.svg',
                     'subnav' => [
                         'logs' => [
