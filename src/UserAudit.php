@@ -299,8 +299,14 @@ class UserAudit extends Plugin
             UrlManager::class,
             UrlManager::EVENT_REGISTER_CP_URL_RULES,
             function (RegisterUrlRulesEvent $event) {
+                // Root and /logs both render the log list, so clicking
+                // the main nav item lands on Logs.
                 $event->rules['user-audit'] = 'user-audit/activity/index';
-                $event->rules['user-audit/active'] = 'user-audit/activity/active';
+                $event->rules['user-audit/logs'] = 'user-audit/activity/index';
+                $event->rules['user-audit/monitor'] = 'user-audit/activity/monitor';
+                // Legacy alias — old bookmarks to the active-sessions
+                // page keep working.
+                $event->rules['user-audit/active'] = 'user-audit/activity/monitor';
                 $event->rules['user-audit/export'] = 'user-audit/activity/export';
             }
         );
@@ -318,8 +324,20 @@ class UserAudit extends Plugin
 
                 $event->navItems[] = [
                     'label' => Craft::t('user-audit', 'User Audit'),
-                    'url' => 'user-audit',
+                    // Main item target = Logs, so a click on the top
+                    // nav item deterministically lands on the log list.
+                    'url' => 'user-audit/logs',
                     'icon' => '@pixelwerft/useraudit/icon-mask.svg',
+                    'subnav' => [
+                        'logs' => [
+                            'label' => Craft::t('user-audit', 'Logs'),
+                            'url' => 'user-audit/logs',
+                        ],
+                        'monitor' => [
+                            'label' => Craft::t('user-audit', 'Monitor'),
+                            'url' => 'user-audit/monitor',
+                        ],
+                    ],
                 ];
             }
         );

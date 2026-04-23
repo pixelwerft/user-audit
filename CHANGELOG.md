@@ -3,6 +3,27 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.4.0 - 2026-04-23
+
+### Added
+- Subnav under the *User Audit* control-panel item:
+  - **Logs** — the filterable, paginated event list (previously the root).
+  - **Monitor** — a dedicated activity dashboard with stat cards and a
+    smooth-curve time-series chart. Clicking the main nav item lands on
+    Logs.
+- Monitor view: filterable by event, context and client (same dropdowns
+  as the log list) plus a time-window picker (24 h / 48 h / 7 d). Buckets
+  auto-switch between hourly and daily based on the window.
+- Log list: column headers are now sort links (↑ / ↓ / ↕). Sort column
+  and direction are preserved across filter changes and pagination.
+
+### Changed
+- `/user-audit/active` now redirects to the Monitor view.
+
+### Removed
+- The standalone *Active Sessions* page — its role is absorbed by the
+  Monitor dashboard.
+
 ## 1.3.0 - 2026-04-23
 
 ### Changed

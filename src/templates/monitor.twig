@@ -1,0 +1,157 @@
+{% extends '_layouts/cp' %}
+
+{% set title = 'Monitor'|t('user-audit') %}
+{% set selectedSubnavItem = 'monitor' %}
+
+{% set crumbs = [
+  { label: 'User Audit'|t('user-audit'), url: cpUrl('user-audit/logs') }
+] %}
+
+{% block content %}
+
+<div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center; justify-content: flex-end;">
+  <a href="{{ cpUrl('settings/plugins/user-audit') }}" class="btn settings icon" title="{{ 'Settings'|t('user-audit') }}">
+    {{ 'Settings'|t('user-audit') }}
+  </a>
+</div>
+
+<div class="field">
+  <form id="user-audit-monitor-filter" method="get" action="{{ cpUrl('user-audit/monitor') }}">
+    <div class="flex">
+      <div>
+        <div class="select">
+          <select name="event" data-ua-live-select>
+            <option value="">{{ 'All events'|t('user-audit') }}</option>
+            <option value="login" {% if eventType == 'login' %}selected{% endif %}>login</option>
+            <option value="logout" {% if eventType == 'logout' %}selected{% endif %}>logout</option>
+            <option value="login_failed" {% if eventType == 'login_failed' %}selected{% endif %}>login_failed</option>
+            <option value="login_blocked" {% if eventType == 'login_blocked' %}selected{% endif %}>login_blocked</option>
+            <option value="session_expired" {% if eventType == 'session_expired' %}selected{% endif %}>session_expired</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <div class="select">
+          <select name="context" data-ua-live-select>
+            <option value="">{{ 'All contexts'|t('user-audit') }}</option>
+            <option value="cp" {% if context == 'cp' %}selected{% endif %}>{{ 'CP (Backend)'|t('user-audit') }}</option>
+            <option value="fe" {% if context == 'fe' %}selected{% endif %}>{{ 'Frontend'|t('user-audit') }}</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <div class="select">
+          <select name="client" data-ua-live-select>
+            <option value="">{{ 'All clients'|t('user-audit') }}</option>
+            <option value="pwa" {% if client == 'pwa' %}selected{% endif %}>PWA</option>
+            <option value="browser" {% if client == 'browser' %}selected{% endif %}>{{ 'Browser'|t('user-audit') }}</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <div class="select">
+          <select name="hours" data-ua-live-select>
+            <option value="24" {% if windowHours == 24 %}selected{% endif %}>{{ 'Last 24 hours'|t('user-audit') }}</option>
+            <option value="48" {% if windowHours == 48 %}selected{% endif %}>{{ 'Last 48 hours'|t('user-audit') }}</option>
+            <option value="168" {% if windowHours == 168 %}selected{% endif %}>{{ 'Last 7 days'|t('user-audit') }}</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <button type="submit" class="btn submit">{{ 'Apply'|t('user-audit') }}</button>
+      </div>
+      {% if eventType or context or client or windowHours != 24 %}
+        <div>
+          <a href="{{ cpUrl('user-audit/monitor') }}" class="btn">{{ 'Reset'|t('user-audit') }}</a>
+        </div>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin: 1rem 0 1.5rem;">
+  <div style="border: 1px solid #e0e0e0; border-radius: 6px; padding: 0.75rem 1rem; background: #fafafa;">
+    <div class="light" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;">{{ 'Logins'|t('user-audit') }}</div>
+    <div style="font-size: 1.75rem; font-weight: 600; line-height: 1.15;">{{ stats.logins }}</div>
+  </div>
+  <div style="border: 1px solid #e0e0e0; border-radius: 6px; padding: 0.75rem 1rem; background: #fafafa;">
+    <div class="light" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;">{{ 'Logouts'|t('user-audit') }}</div>
+    <div style="font-size: 1.75rem; font-weight: 600; line-height: 1.15;">{{ stats.logouts }}</div>
+  </div>
+  <div style="border: 1px solid #e0e0e0; border-radius: 6px; padding: 0.75rem 1rem; background: {% if stats.failed > 0 %}#fff4e5{% else %}#fafafa{% endif %};">
+    <div class="light" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;">{{ 'Failed'|t('user-audit') }}</div>
+    <div style="font-size: 1.75rem; font-weight: 600; line-height: 1.15;">{{ stats.failed }}</div>
+  </div>
+  <div style="border: 1px solid #e0e0e0; border-radius: 6px; padding: 0.75rem 1rem; background: {% if stats.blocked > 0 %}#ffe5e5{% else %}#fafafa{% endif %};">
+    <div class="light" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;">{{ 'Blocked'|t('user-audit') }}</div>
+    <div style="font-size: 1.75rem; font-weight: 600; line-height: 1.15;">{{ stats.blocked }}</div>
+  </div>
+</div>
+
+<div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1rem; background: #fff;">
+  <svg viewBox="0 0 {{ chartWidth }} {{ chartHeight }}" preserveAspectRatio="none"
+       style="width: 100%; height: 260px; display: block;"
+       aria-label="{{ 'Activity over time'|t('user-audit') }}">
+    <defs>
+      <linearGradient id="uaChartFill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#2f80ed" stop-opacity="0.35"/>
+        <stop offset="100%" stop-color="#2f80ed" stop-opacity="0.02"/>
+      </linearGradient>
+    </defs>
+
+    {# Horizontal gridlines at 25/50/75/100 % of max. Subtle so the curve stays the focal point. #}
+    {% for pct in [0, 25, 50, 75, 100] %}
+      {% set y = chartPadY + (chartHeight - 2 * chartPadY) * (1 - pct / 100) %}
+      <line x1="{{ chartPadX }}" y1="{{ y }}" x2="{{ chartWidth - chartPadX }}" y2="{{ y }}"
+            stroke="#eee" stroke-width="1"/>
+    {% endfor %}
+
+    {% if chartAreaPath %}
+      <path d="{{ chartAreaPath }}" fill="url(#uaChartFill)" stroke="none"/>
+    {% endif %}
+    {% if chartLinePath %}
+      <path d="{{ chartLinePath }}" fill="none" stroke="#2f80ed" stroke-width="2.25"
+            stroke-linejoin="round" stroke-linecap="round"/>
+    {% endif %}
+
+    {# Data-point dots + tooltips via <title>. Sparingly rendered — one per bucket is plenty. #}
+    {% for i, p in chartPoints %}
+      <g>
+        <circle cx="{{ p.0 }}" cy="{{ p.1 }}" r="3" fill="#fff" stroke="#2f80ed" stroke-width="1.75"/>
+        <title>{{ buckets[i].label }} · {{ buckets[i].count }}</title>
+      </g>
+    {% endfor %}
+  </svg>
+
+  {# X-axis labels. For dense windows we thin them out so the axis stays readable. #}
+  {% set labelStep = buckets|length > 24 ? (buckets|length / 8)|round(0, 'ceil') : 2 %}
+  <div style="display: flex; justify-content: space-between; margin-top: 0.25rem; padding: 0 {{ chartPadX / chartWidth * 100 }}%; font-size: 0.7rem; color: #888;">
+    {% for i, b in buckets %}
+      {% if i % labelStep == 0 or i == buckets|length - 1 %}
+        <span>{{ b.label }}</span>
+      {% endif %}
+    {% endfor %}
+  </div>
+</div>
+
+<p class="light" style="margin-top: 0.75rem; font-size: 0.8rem;">
+  {{ 'Bucket size'|t('user-audit') }}:
+  {% if useDaily %}
+    {{ 'one bar per day'|t('user-audit') }}
+  {% else %}
+    {{ 'one bar per hour'|t('user-audit') }}
+  {% endif %}
+  · {{ 'window'|t('user-audit') }}: {{ windowHours }} h
+</p>
+
+{% js %}
+(function () {
+  var form = document.getElementById('user-audit-monitor-filter');
+  if (!form) return;
+  form.querySelectorAll('[data-ua-live-select]').forEach(function (el) {
+    el.addEventListener('change', function () { form.submit(); });
+  });
+})();
+{% endjs %}
+
+{% endblock %}

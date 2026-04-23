@@ -1,26 +1,51 @@
 {% extends '_layouts/cp' %}
 
-{% set title = 'User Audit'|t('user-audit') %}
-{% set selectedSubnavItem = 'index' %}
+{% set title = 'Logs'|t('user-audit') %}
+{% set selectedSubnavItem = 'logs' %}
 
 {% set crumbs = [
-  { label: 'Plugins'|t('app'), url: cpUrl('settings/plugins') }
+  { label: 'User Audit'|t('user-audit'), url: cpUrl('user-audit/logs') }
 ] %}
 
 {% block content %}
 
-<div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;">
-  <a href="{{ cpUrl('user-audit') }}" class="btn active">{{ 'Full Log'|t('user-audit') }}</a>
-  <a href="{{ cpUrl('user-audit/active') }}" class="btn">{{ 'Active Sessions'|t('user-audit') }}</a>
-  <div style="margin-left: auto;">
-    <a href="{{ cpUrl('settings/plugins/user-audit') }}" class="btn settings icon" title="{{ 'Settings'|t('user-audit') }}">
-      {{ 'Settings'|t('user-audit') }}
-    </a>
-  </div>
+{% set sortableColumns = {
+  dateCreated: 'Time'|t('user-audit'),
+  eventType: 'Event'|t('user-audit'),
+  context: 'Context'|t('user-audit'),
+  client: 'Client'|t('user-audit'),
+  userId: 'User'|t('user-audit'),
+  email: 'Email / Login'|t('user-audit'),
+  userGroups: 'Groups'|t('user-audit'),
+  ipAddress: 'IP'|t('user-audit'),
+  deviceType: 'Device'|t('user-audit'),
+  osName: 'OS'|t('user-audit'),
+  browserName: 'Browser'|t('user-audit'),
+  failureReason: 'Reason'|t('user-audit'),
+} %}
+
+{% macro sortHeader(col, label, currentSort, currentDir, baseQuery) %}
+  {% set isActive = currentSort == col %}
+  {% set nextDir = (isActive and currentDir == 'asc') ? 'desc' : 'asc' %}
+  {% set url = cpUrl('user-audit/logs', baseQuery|merge({ sort: col, dir: nextDir })) %}
+  <a href="{{ url }}" style="color: inherit; text-decoration: none; display: inline-flex; align-items: center; gap: 0.25rem;">
+    <span>{{ label }}</span>
+    {% if isActive %}
+      <span style="font-size: 0.7rem; opacity: 0.7;">{{ currentDir == 'asc' ? '↑' : '↓' }}</span>
+    {% else %}
+      <span style="font-size: 0.7rem; opacity: 0.25;">↕</span>
+    {% endif %}
+  </a>
+{% endmacro %}
+
+<div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center; justify-content: flex-end;">
+  <a href="{{ cpUrl('settings/plugins/user-audit') }}" class="btn settings icon" title="{{ 'Settings'|t('user-audit') }}">
+    {{ 'Settings'|t('user-audit') }}
+  </a>
 </div>
 
 <div class="field">
-  <form id="user-audit-filter" method="get" action="{{ cpUrl('user-audit') }}">
+  <form id="user-audit-filter" method="get" action="{{ cpUrl('user-audit/logs') }}">
     <div class="flex">
       <div class="flex-grow">
         <input
@@ -68,7 +93,7 @@
       </div>
       {% if q or eventType or context or client %}
         <div>
-          <a href="{{ cpUrl('user-audit') }}" class="btn">{{ 'Reset'|t('user-audit') }}</a>
+          <a href="{{ cpUrl('user-audit/logs') }}" class="btn">{{ 'Reset'|t('user-audit') }}</a>
         </div>
       {% endif %}
       <div>
@@ -78,25 +103,23 @@
         </a>
       </div>
     </div>
+    {# Preserve current sort on form submit so filter changes don't reset the user's chosen column order. #}
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <input type="hidden" name="dir" value="{{ dir }}">
   </form>
 </div>
+
+{% set sortBaseQuery = { q: q, event: eventType, context: context, client: client } %}
 
 <div class="tableview">
   <table class="data fullwidth">
     <thead>
       <tr>
-        <th>{{ 'Time'|t('user-audit') }}</th>
-        <th>{{ 'Event'|t('user-audit') }}</th>
-        <th>{{ 'Context'|t('user-audit') }}</th>
-        <th>{{ 'Client'|t('user-audit') }}</th>
-        <th>{{ 'User'|t('user-audit') }}</th>
-        <th>{{ 'Email / Login'|t('user-audit') }}</th>
-        <th>{{ 'Groups'|t('user-audit') }}</th>
-        <th>{{ 'IP'|t('user-audit') }}</th>
-        <th>{{ 'Device'|t('user-audit') }}</th>
-        <th>{{ 'OS'|t('user-audit') }}</th>
-        <th>{{ 'Browser'|t('user-audit') }}</th>
-        <th>{{ 'Reason'|t('user-audit') }}</th>
+        {% for col, label in sortableColumns %}
+          <th style="white-space: nowrap; cursor: pointer;">
+            {{ _self.sortHeader(col, label, sort, dir, sortBaseQuery) }}
+          </th>
+        {% endfor %}
       </tr>
     </thead>
     <tbody>
@@ -152,16 +175,16 @@
 
 {% if pageCount > 1 %}
   <nav class="pagination" style="margin-top: 1rem;">
-    {% set baseQuery = { q: q, event: eventType, context: context, client: client } %}
+    {% set baseQuery = { q: q, event: eventType, context: context, client: client, sort: sort, dir: dir } %}
     {% if page > 1 %}
-      <a class="btn" href="{{ cpUrl('user-audit', baseQuery|merge({ page: page - 1 })) }}">&larr; {{ 'Previous'|t('user-audit') }}</a>
+      <a class="btn" href="{{ cpUrl('user-audit/logs', baseQuery|merge({ page: page - 1 })) }}">&larr; {{ 'Previous'|t('user-audit') }}</a>
     {% endif %}
     <span class="light" style="margin: 0 0.75rem;">
       {{ 'Page %s of %s'|t('user-audit')|format(page, pageCount) }} &middot;
       {{ '%s entries'|t('user-audit')|format(total) }}
     </span>
     {% if page < pageCount %}
-      <a class="btn" href="{{ cpUrl('user-audit', baseQuery|merge({ page: page + 1 })) }}">{{ 'Next'|t('user-audit') }} &rarr;</a>
+      <a class="btn" href="{{ cpUrl('user-audit/logs', baseQuery|merge({ page: page + 1 })) }}">{{ 'Next'|t('user-audit') }} &rarr;</a>
     {% endif %}
   </nav>
 {% endif %}
