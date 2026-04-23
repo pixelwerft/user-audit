@@ -172,8 +172,16 @@
             font-size="10" fill="#888" font-family="system-ui, sans-serif">{{ tick.value }}</text>
     {% endfor %}
 
-    {# One stroke path per series. No area fill here — multiple
-       overlapping filled areas quickly turn into mud. #}
+    {# Area fills first (so lines sit on top). Very low opacity so
+       overlapping fills add up without turning muddy — works well
+       for up to 5 concurrent series in practice. #}
+    {% for s in chartSeries %}
+      {% if s.areaPath %}
+        <path d="{{ s.areaPath }}" fill="{{ s.color }}" fill-opacity="0.08" stroke="none"/>
+      {% endif %}
+    {% endfor %}
+
+    {# Stroke paths over the fills. #}
     {% for s in chartSeries %}
       {% if s.linePath %}
         <path d="{{ s.linePath }}" fill="none" stroke="{{ s.color }}" stroke-width="2"

@@ -262,16 +262,30 @@ class ActivityController extends Controller
 
         // Fetch dateCreated + eventType; bucket in PHP so the SQL
         // stays portable across MySQL/MariaDB/Postgres. Short-circuit
-        // when nothing is selected — avoids a full-table scan with an
-        // empty IN clause (different drivers handle that differently).
+        // when a dimension is empty (= user explicitly unchecked
+        // everything in that dropdown) — that state legitimately
+        // means "show nothing".
         if ($eventTypes && $contexts && $clients) {
             $query = (new \yii\db\Query())
                 ->select(['dateCreated', 'eventType'])
                 ->from('{{%user_activity_log}}')
-                ->andWhere(['>=', 'dateCreated', $cutoffStr])
-                ->andWhere(['eventType' => $eventTypes])
-                ->andWhere(['context' => $contexts])
-                ->andWhere(['client' => $clients]);
+                ->andWhere(['>=', 'dateCreated', $cutoffStr]);
+
+            // Only add an IN-clause when the selection actually narrows
+            // the result. "All options selected" is semantically
+            // identical to "no filter" — in particular it must include
+            // rows with NULL in that column, which an IN(...) silently
+            // excludes. context and client are the common NULL columns
+            // (CP-only / console-only rows don't have a client).
+            if (count($eventTypes) < count($allEventTypes)) {
+                $query->andWhere(['eventType' => $eventTypes]);
+            }
+            if (count($contexts) < count($allContexts)) {
+                $query->andWhere(['context' => $contexts]);
+            }
+            if (count($clients) < count($allClients)) {
+                $query->andWhere(['client' => $clients]);
+            }
 
             foreach ($query->each(1000) as $row) {
                 $key = (new \DateTime($row['dateCreated']))->format($bucketFormat);
@@ -339,26 +353,34 @@ class ActivityController extends Controller
             $rawPoints = array_map(fn($p) => [$p['x'], $p['y']], $points);
             // Clamp control points inside the plot so a Catmull-Rom
             // overshoot can't dip below the x-axis (= zero count).
-            [$linePath] = $this->buildSmoothPath($rawPoints, $baseY, $padLeft, $padY);
+            [$linePath, $areaPath] = $this->buildSmoothPath($rawPoints, $baseY, $padLeft, $padY);
 
             $series[] = [
                 'key' => $et,
                 'color' => self::MONITOR_EVENT_COLORS[$et] ?? '#2f80ed',
                 'linePath' => $linePath,
+                'areaPath' => $areaPath,
                 'points' => $points,
             ];
         }
 
         // Stat cards: totals per event type within the same window,
         // respecting context and client filters (but not the event
-        // filter — the cards exist to compare event types).
-        $statCard = function (string $type) use ($cutoffStr, $contexts, $clients): int {
+        // filter — the cards exist to compare event types). Same
+        // all-selected-means-no-filter rule as the main query so
+        // NULL-column rows aren't silently dropped.
+        $statCard = function (string $type) use (
+            $cutoffStr, $contexts, $clients, $allContexts, $allClients
+        ): int {
             $q = (new \yii\db\Query())
                 ->from('{{%user_activity_log}}')
                 ->andWhere(['eventType' => $type])
                 ->andWhere(['>=', 'dateCreated', $cutoffStr]);
-            if ($contexts) $q->andWhere(['context' => $contexts]);
-            if ($clients) $q->andWhere(['client' => $clients]);
+            if (!$contexts || !$clients) {
+                return 0;
+            }
+            if (count($contexts) < count($allContexts)) $q->andWhere(['context' => $contexts]);
+            if (count($clients) < count($allClients)) $q->andWhere(['client' => $clients]);
             return (int)$q->count();
         };
 
