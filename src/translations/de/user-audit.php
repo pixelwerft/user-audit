@@ -60,8 +60,8 @@ return [
     'User Audit' => 'User Audit',
     'Logs' => 'Logs',
     'Monitor' => 'Monitor',
-    'User Logs' => 'User Logs',
-    'User Monitor' => 'User Monitor',
+    'User audit logs' => 'User Audit Logs',
+    'User audit monitor' => 'User Audit Monitor',
 
     // ─── Monitor: filters & chart ───────────────────────────────────────
     'Apply' => 'Anwenden',
