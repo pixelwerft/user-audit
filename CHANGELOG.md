@@ -3,6 +3,17 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.2.1 - 2026-04-23
+
+### Fixed
+- Plugin settings page threw `Twig\Error\SyntaxError` ("Unexpected
+  endjs tag (expecting closing tag for the namespace tag defined
+  near line 195)") because a JS comment inside a `{% js %}` block
+  referenced Craft's wrapper tag literally as `{% namespace
+  'settings' %}`. Twig parses the body of `{% js %}` blocks too —
+  it's not a raw region — so the literal braces were read as a
+  real tag opening. Comment rephrased without Twig syntax.
+
 ## 1.2.0 - 2026-04-23
 
 ### Fixed
