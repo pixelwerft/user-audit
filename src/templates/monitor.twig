@@ -7,6 +7,32 @@
   { label: 'User Audit'|t('user-audit'), url: cpUrl('user-audit/logs') }
 ] %}
 
+{% set eventOptions = [
+  { value: 'login',            label: 'login' },
+  { value: 'logout',           label: 'logout' },
+  { value: 'login_failed',     label: 'login_failed' },
+  { value: 'login_blocked',    label: 'login_blocked' },
+  { value: 'session_expired',  label: 'session_expired' },
+] %}
+{% set contextOptions = [
+  { value: 'cp', label: 'CP (Backend)'|t('user-audit') },
+  { value: 'fe', label: 'Frontend'|t('user-audit') },
+] %}
+{% set clientOptions = [
+  { value: 'pwa',     label: 'PWA' },
+  { value: 'browser', label: 'Browser'|t('user-audit') },
+] %}
+{% set rangeOptions = [
+  { value: '24h',   label: 'Last 24 hours'|t('user-audit') },
+  { value: '48h',   label: 'Last 48 hours'|t('user-audit') },
+  { value: '7d',    label: 'Last 7 days'|t('user-audit') },
+  { value: 'month', label: 'This month'|t('user-audit') },
+  { value: '30d',   label: 'Last 30 days'|t('user-audit') },
+  { value: '90d',   label: 'Last 90 days'|t('user-audit') },
+] %}
+
+{% set hasFilter = eventTypes|length or contexts|length or clients|length or range != '24h' %}
+
 {% block content %}
 
 <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center; justify-content: flex-end;">
@@ -15,59 +41,89 @@
   </a>
 </div>
 
-<div class="field">
-  <form id="user-audit-monitor-filter" method="get" action="{{ cpUrl('user-audit/monitor') }}">
-    <div class="flex">
-      <div>
-        <div class="select">
-          <select name="event" data-ua-live-select>
-            <option value="">{{ 'All events'|t('user-audit') }}</option>
-            <option value="login" {% if eventType == 'login' %}selected{% endif %}>login</option>
-            <option value="logout" {% if eventType == 'logout' %}selected{% endif %}>logout</option>
-            <option value="login_failed" {% if eventType == 'login_failed' %}selected{% endif %}>login_failed</option>
-            <option value="login_blocked" {% if eventType == 'login_blocked' %}selected{% endif %}>login_blocked</option>
-            <option value="session_expired" {% if eventType == 'session_expired' %}selected{% endif %}>session_expired</option>
-          </select>
-        </div>
-      </div>
-      <div>
-        <div class="select">
-          <select name="context" data-ua-live-select>
-            <option value="">{{ 'All contexts'|t('user-audit') }}</option>
-            <option value="cp" {% if context == 'cp' %}selected{% endif %}>{{ 'CP (Backend)'|t('user-audit') }}</option>
-            <option value="fe" {% if context == 'fe' %}selected{% endif %}>{{ 'Frontend'|t('user-audit') }}</option>
-          </select>
-        </div>
-      </div>
-      <div>
-        <div class="select">
-          <select name="client" data-ua-live-select>
-            <option value="">{{ 'All clients'|t('user-audit') }}</option>
-            <option value="pwa" {% if client == 'pwa' %}selected{% endif %}>PWA</option>
-            <option value="browser" {% if client == 'browser' %}selected{% endif %}>{{ 'Browser'|t('user-audit') }}</option>
-          </select>
-        </div>
-      </div>
-      <div>
-        <div class="select">
-          <select name="hours" data-ua-live-select>
-            <option value="24" {% if windowHours == 24 %}selected{% endif %}>{{ 'Last 24 hours'|t('user-audit') }}</option>
-            <option value="48" {% if windowHours == 48 %}selected{% endif %}>{{ 'Last 48 hours'|t('user-audit') }}</option>
-            <option value="168" {% if windowHours == 168 %}selected{% endif %}>{{ 'Last 7 days'|t('user-audit') }}</option>
-          </select>
-        </div>
-      </div>
-      <div>
-        <button type="submit" class="btn submit">{{ 'Apply'|t('user-audit') }}</button>
-      </div>
-      {% if eventType or context or client or windowHours != 24 %}
-        <div>
-          <a href="{{ cpUrl('user-audit/monitor') }}" class="btn">{{ 'Reset'|t('user-audit') }}</a>
-        </div>
-      {% endif %}
+<form id="user-audit-monitor-filter" method="get" action="{{ cpUrl('user-audit/monitor') }}"
+      style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 1rem;">
+
+  {# --- Multiselect: event --- #}
+  <div class="ua-multiselect" data-placeholder="{{ 'All events'|t('user-audit') }}">
+    <button type="button" class="btn menubtn ua-ms-toggle">
+      <span class="ua-ms-label">
+        {% if eventTypes|length %}
+          {{ eventTypes|length }} × {{ 'event'|t('user-audit') }}
+        {% else %}
+          {{ 'All events'|t('user-audit') }}
+        {% endif %}
+      </span>
+    </button>
+    <div class="ua-ms-panel" hidden>
+      {% for opt in eventOptions %}
+        <label class="ua-ms-option">
+          <input type="checkbox" name="event[]" value="{{ opt.value }}"
+                 {% if opt.value in eventTypes %}checked{% endif %}>
+          <span>{{ opt.label }}</span>
+        </label>
+      {% endfor %}
     </div>
-  </form>
-</div>
+  </div>
+
+  {# --- Multiselect: context --- #}
+  <div class="ua-multiselect" data-placeholder="{{ 'All contexts'|t('user-audit') }}">
+    <button type="button" class="btn menubtn ua-ms-toggle">
+      <span class="ua-ms-label">
+        {% if contexts|length %}
+          {{ contexts|length }} × {{ 'context'|t('user-audit') }}
+        {% else %}
+          {{ 'All contexts'|t('user-audit') }}
+        {% endif %}
+      </span>
+    </button>
+    <div class="ua-ms-panel" hidden>
+      {% for opt in contextOptions %}
+        <label class="ua-ms-option">
+          <input type="checkbox" name="context[]" value="{{ opt.value }}"
+                 {% if opt.value in contexts %}checked{% endif %}>
+          <span>{{ opt.label }}</span>
+        </label>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# --- Multiselect: client --- #}
+  <div class="ua-multiselect" data-placeholder="{{ 'All clients'|t('user-audit') }}">
+    <button type="button" class="btn menubtn ua-ms-toggle">
+      <span class="ua-ms-label">
+        {% if clients|length %}
+          {{ clients|length }} × {{ 'client'|t('user-audit') }}
+        {% else %}
+          {{ 'All clients'|t('user-audit') }}
+        {% endif %}
+      </span>
+    </button>
+    <div class="ua-ms-panel" hidden>
+      {% for opt in clientOptions %}
+        <label class="ua-ms-option">
+          <input type="checkbox" name="client[]" value="{{ opt.value }}"
+                 {% if opt.value in clients %}checked{% endif %}>
+          <span>{{ opt.label }}</span>
+        </label>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# --- Range select (single-choice, kept as a native select for keyboard-nav parity) --- #}
+  <div class="select">
+    <select name="range" data-ua-live-select>
+      {% for opt in rangeOptions %}
+        <option value="{{ opt.value }}" {% if opt.value == range %}selected{% endif %}>{{ opt.label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <button type="submit" class="btn submit">{{ 'Apply'|t('user-audit') }}</button>
+  {% if hasFilter %}
+    <a href="{{ cpUrl('user-audit/monitor') }}" class="btn">{{ 'Reset'|t('user-audit') }}</a>
+  {% endif %}
+</form>
 
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin: 1rem 0 1.5rem;">
   <div style="border: 1px solid #e0e0e0; border-radius: 6px; padding: 0.75rem 1rem; background: #fafafa;">
@@ -88,9 +144,24 @@
   </div>
 </div>
 
-<div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1rem; background: #fff;">
-  <svg viewBox="0 0 {{ chartWidth }} {{ chartHeight }}" preserveAspectRatio="none"
-       style="width: 100%; height: 260px; display: block;"
+{# Precompute the JS payload once so the hover handler doesn't have to
+   walk the DOM to find each point. #}
+{% set pointsJson = [] %}
+{% for i, p in chartPoints %}
+  {% set pointsJson = pointsJson|merge([{
+    x: p.0,
+    y: p.1,
+    label: buckets[i].tooltipLabel,
+    count: buckets[i].count,
+  }]) %}
+{% endfor %}
+
+<div class="ua-chart-wrap" style="position: relative; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1rem; background: #fff;">
+  <svg class="ua-chart" viewBox="0 0 {{ chartWidth }} {{ chartHeight }}" preserveAspectRatio="none"
+       data-points="{{ pointsJson|json_encode }}"
+       data-vb-width="{{ chartWidth }}"
+       data-vb-height="{{ chartHeight }}"
+       style="width: 100%; height: 260px; display: block; cursor: crosshair;"
        aria-label="{{ 'Activity over time'|t('user-audit') }}">
     <defs>
       <linearGradient id="uaChartFill" x1="0" y1="0" x2="0" y2="1">
@@ -99,11 +170,13 @@
       </linearGradient>
     </defs>
 
-    {# Horizontal gridlines at 25/50/75/100 % of max. Subtle so the curve stays the focal point. #}
-    {% for pct in [0, 25, 50, 75, 100] %}
-      {% set y = chartPadY + (chartHeight - 2 * chartPadY) * (1 - pct / 100) %}
-      <line x1="{{ chartPadX }}" y1="{{ y }}" x2="{{ chartWidth - chartPadX }}" y2="{{ y }}"
-            stroke="#eee" stroke-width="1"/>
+    {# Horizontal gridlines with Y-axis tick labels. The top/bottom
+       lines double as the plot boundary; the others are subtle. #}
+    {% for tick in yTicks %}
+      <line x1="{{ chartPadX }}" y1="{{ tick.y }}" x2="{{ chartWidth - chartPadX }}" y2="{{ tick.y }}"
+            stroke="{{ loop.first or loop.last ? '#d0d0d0' : '#eee' }}" stroke-width="1"/>
+      <text x="{{ chartPadX - 6 }}" y="{{ tick.y + 3 }}" text-anchor="end"
+            font-size="10" fill="#888" font-family="system-ui, sans-serif">{{ tick.value }}</text>
     {% endfor %}
 
     {% if chartAreaPath %}
@@ -114,18 +187,26 @@
             stroke-linejoin="round" stroke-linecap="round"/>
     {% endif %}
 
-    {# Data-point dots + tooltips via <title>. Sparingly rendered — one per bucket is plenty. #}
-    {% for i, p in chartPoints %}
-      <g>
-        <circle cx="{{ p.0 }}" cy="{{ p.1 }}" r="3" fill="#fff" stroke="#2f80ed" stroke-width="1.75"/>
-        <title>{{ buckets[i].label }} · {{ buckets[i].count }}</title>
-      </g>
+    {# Static data dots. No <title> on these — the interactive overlay
+       tooltip would otherwise compete with the browser's native one. #}
+    {% for p in chartPoints %}
+      <circle cx="{{ p.0 }}" cy="{{ p.1 }}" r="3" fill="#fff" stroke="#2f80ed" stroke-width="1.75"/>
     {% endfor %}
+
+    {# Moving highlight marker, positioned by JS on hover. #}
+    <circle class="ua-marker" r="5" fill="#2f80ed" stroke="#fff" stroke-width="2" opacity="0" cx="0" cy="0"/>
   </svg>
 
-  {# X-axis labels. For dense windows we thin them out so the axis stays readable. #}
+  <div class="ua-tooltip" style="position: absolute; display: none; transform: translate(-50%, calc(-100% - 12px));
+       background: #1f2937; color: #fff; padding: 6px 10px; border-radius: 4px; font-size: 0.75rem;
+       pointer-events: none; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,0.18); z-index: 10;">
+    <div class="ua-tooltip-label" style="font-weight: 500;"></div>
+    <div class="ua-tooltip-count" style="opacity: 0.85;"></div>
+  </div>
+
+  {# X-axis labels — thinned for dense windows so the axis stays readable. #}
   {% set labelStep = buckets|length > 24 ? (buckets|length / 8)|round(0, 'ceil') : 2 %}
-  <div style="display: flex; justify-content: space-between; margin-top: 0.25rem; padding: 0 {{ chartPadX / chartWidth * 100 }}%; font-size: 0.7rem; color: #888;">
+  <div style="display: flex; justify-content: space-between; margin-top: 0.35rem; padding: 0 {{ chartPadX / chartWidth * 100 }}%; font-size: 0.7rem; color: #888;">
     {% for i, b in buckets %}
       {% if i % labelStep == 0 or i == buckets|length - 1 %}
         <span>{{ b.label }}</span>
@@ -136,21 +217,122 @@
 
 <p class="light" style="margin-top: 0.75rem; font-size: 0.8rem;">
   {{ 'Bucket size'|t('user-audit') }}:
-  {% if useDaily %}
-    {{ 'one bar per day'|t('user-audit') }}
-  {% else %}
-    {{ 'one bar per hour'|t('user-audit') }}
-  {% endif %}
-  · {{ 'window'|t('user-audit') }}: {{ windowHours }} h
+  {% if useDaily %}{{ 'one bar per day'|t('user-audit') }}{% else %}{{ 'one bar per hour'|t('user-audit') }}{% endif %}
+  · {{ 'max'|t('user-audit') }}: {{ maxCount }}
 </p>
+
+{% css %}
+.ua-multiselect { position: relative; }
+.ua-ms-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 180px;
+  background: #fff;
+  border: 1px solid #cdcdcd;
+  border-radius: 5px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+  padding: 0.35rem 0;
+  z-index: 20;
+}
+.ua-ms-option {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.75rem;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.85rem;
+}
+.ua-ms-option:hover { background: #f3f4f6; }
+.ua-ms-option input[type="checkbox"] { margin: 0; }
+{% endcss %}
 
 {% js %}
 (function () {
-  var form = document.getElementById('user-audit-monitor-filter');
-  if (!form) return;
-  form.querySelectorAll('[data-ua-live-select]').forEach(function (el) {
-    el.addEventListener('change', function () { form.submit(); });
+  // --- Multi-select dropdowns ---------------------------------------------
+  document.querySelectorAll('.ua-multiselect').forEach(function (root) {
+    var toggle = root.querySelector('.ua-ms-toggle');
+    var panel  = root.querySelector('.ua-ms-panel');
+    if (!toggle || !panel) return;
+
+    toggle.addEventListener('click', function (e) {
+      e.stopPropagation();
+      // Close any other open panel first so only one is visible at a time.
+      document.querySelectorAll('.ua-ms-panel').forEach(function (p) {
+        if (p !== panel) p.setAttribute('hidden', '');
+      });
+      if (panel.hasAttribute('hidden')) panel.removeAttribute('hidden');
+      else panel.setAttribute('hidden', '');
+    });
+
+    panel.addEventListener('click', function (e) { e.stopPropagation(); });
   });
+
+  document.addEventListener('click', function () {
+    document.querySelectorAll('.ua-ms-panel').forEach(function (p) {
+      p.setAttribute('hidden', '');
+    });
+  });
+
+  // --- Range select submits immediately (single-choice, no Apply needed) --
+  var form = document.getElementById('user-audit-monitor-filter');
+  if (form) {
+    form.querySelectorAll('[data-ua-live-select]').forEach(function (el) {
+      el.addEventListener('change', function () { form.submit(); });
+    });
+  }
+
+  // --- Chart hover tooltip -------------------------------------------------
+  var svg = document.querySelector('.ua-chart');
+  if (!svg) return;
+  var wrap    = svg.closest('.ua-chart-wrap');
+  var tooltip = wrap.querySelector('.ua-tooltip');
+  var marker  = svg.querySelector('.ua-marker');
+  var labelEl = tooltip.querySelector('.ua-tooltip-label');
+  var countEl = tooltip.querySelector('.ua-tooltip-count');
+  var vbW = parseFloat(svg.getAttribute('data-vb-width'));
+
+  var points;
+  try { points = JSON.parse(svg.getAttribute('data-points') || '[]'); }
+  catch (e) { points = []; }
+  if (!points.length) return;
+
+  function onMove(e) {
+    var svgRect  = svg.getBoundingClientRect();
+    var wrapRect = wrap.getBoundingClientRect();
+    // Convert pixel X to viewBox X via the rendered-to-viewBox scale.
+    var xVb = (e.clientX - svgRect.left) / svgRect.width * vbW;
+
+    // Nearest point by absolute X distance — cheaper than binary search
+    // and plenty fast for <= ~200 buckets.
+    var nearest = points[0], minD = Infinity;
+    for (var i = 0; i < points.length; i++) {
+      var d = Math.abs(points[i].x - xVb);
+      if (d < minD) { minD = d; nearest = points[i]; }
+    }
+
+    marker.setAttribute('cx', nearest.x);
+    marker.setAttribute('cy', nearest.y);
+    marker.setAttribute('opacity', '1');
+
+    var ratioX = svgRect.width  / vbW;
+    var ratioY = svgRect.height / parseFloat(svg.getAttribute('data-vb-height'));
+    tooltip.style.left = (nearest.x * ratioX + (svgRect.left - wrapRect.left)) + 'px';
+    tooltip.style.top  = (nearest.y * ratioY + (svgRect.top  - wrapRect.top))  + 'px';
+    tooltip.style.display = 'block';
+    labelEl.textContent = nearest.label;
+    countEl.textContent = nearest.count + ' ' + (nearest.count === 1
+      ? {{ 'event'|t('user-audit')|json_encode|raw }}
+      : {{ 'events'|t('user-audit')|json_encode|raw }});
+  }
+  function onLeave() {
+    marker.setAttribute('opacity', '0');
+    tooltip.style.display = 'none';
+  }
+
+  svg.addEventListener('mousemove', onMove);
+  svg.addEventListener('mouseleave', onLeave);
 })();
 {% endjs %}
 

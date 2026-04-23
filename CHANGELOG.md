@@ -3,6 +3,34 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.5.0 - 2026-04-23
+
+### Added
+- Monitor: time-range options now include *This month*, *Last 30 days*
+  and *Last 90 days* in addition to the existing 24 h / 48 h / 7 d.
+  *This month* is calendar-bounded (1st of the current month → today);
+  all other ranges are trailing windows.
+- Monitor chart: Y-axis now shows 5 numeric ticks (0 → max event count)
+  so the vertical scale is readable, not just implied.
+- Monitor chart: interactive hover tooltip. Moving the cursor across
+  the chart highlights the nearest bucket with an accent dot and shows
+  a floating tooltip with the richer bucket label and event count.
+- Event / Context / Client filters on the Monitor are now multi-select
+  checkbox dropdowns — pick any combination, the chart updates
+  accordingly. The range picker stays single-choice.
+
+### Changed
+- Monitor URL parameter switched from `?hours=N` to `?range=<key>`
+  (`24h` / `48h` / `7d` / `month` / `30d` / `90d`). Old `?hours=` URLs
+  are mapped to the nearest new range so existing bookmarks stay valid.
+- Filter URL parameters are now arrays: `?event[]=login&event[]=logout`
+  etc. Single-value URLs (`?event=login`) remain accepted.
+
+### Fixed
+- Smooth-curve chart no longer renders segments below the x-axis when
+  a sudden drop to zero triggered a Catmull-Rom overshoot. Control
+  points are now clamped inside the plot area.
+
 ## 1.4.1 - 2026-04-23
 
 ### Added

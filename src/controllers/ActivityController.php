@@ -104,57 +104,113 @@ class ActivityController extends Controller
     }
 
     /**
-     * Monitor: pure time-series dashboard. Renders a bucketed bar
-     * chart of event activity for the selected window, filterable
-     * by event type, context and client — the same dropdowns the
-     * log list offers. Deliberately no log rows on this page; it's
-     * meant to answer "how did activity look" at a glance, not
-     * "what exactly happened".
+     * Valid monitor time-window keys. Anything else in the URL is
+     * silently snapped to the default ('24h').
+     */
+    private const MONITOR_RANGES = ['24h', '48h', '7d', 'month', '30d', '90d'];
+
+    /**
+     * Monitor: pure time-series dashboard. Renders a bucketed line
+     * chart of event activity for the selected range, filterable by
+     * event type, context and client — the same dropdowns the log
+     * list offers. Deliberately no log rows on this page; it's meant
+     * to answer "how did activity look" at a glance, not "what
+     * exactly happened".
      *
-     * Buckets:
-     *   windowHours ≤ 48 → one bar per hour
-     *   windowHours  > 48 → one bar per day
+     * Bucketing strategy:
+     *   24h / 48h         → one bar per hour
+     *   7d / month / 30d  → one bar per day
+     *   90d               → one bar per day (≈ 90 bars)
      *
-     * windowHours is capped at 168 (7 days) to keep the PHP-side
-     * bucketing cheap; longer windows should use the CSV export.
+     * "month" is calendar-bounded (1st of the current month → today);
+     * every other range is a trailing window anchored at "now".
      */
     public function actionMonitor(): Response
     {
         $request = Craft::$app->getRequest();
-        $windowHours = max(1, min(168, (int)$request->getQueryParam('hours', 24)));
-        $eventType = (string)$request->getQueryParam('event', '');
-        $context = (string)$request->getQueryParam('context', '');
-        $client = (string)$request->getQueryParam('client', '');
+        $range = (string)$request->getQueryParam('range', '');
 
-        $useDaily = $windowHours > 48;
-        $bucketCount = $useDaily ? (int)ceil($windowHours / 24) : $windowHours;
-        $bucketFormat = $useDaily ? 'Y-m-d' : 'Y-m-d H';
+        // Filters are multi-select: URLs carry ?event[]=login&event[]=logout etc.
+        // A bare ?event=login string is also accepted for backwards compat.
+        $eventTypes = $this->multiParam($request, 'event', [
+            'login', 'logout', 'login_failed', 'login_blocked', 'session_expired',
+        ]);
+        $contexts = $this->multiParam($request, 'context', ['cp', 'fe']);
+        $clients = $this->multiParam($request, 'client', ['pwa', 'browser']);
 
-        // Cutoff rounded down to the start of the current bucket so
-        // the most recent bar is fully populated, not half-empty.
-        $anchor = new \DateTime();
+        // Legacy support: pre-1.5 URLs carried ?hours=. Map them to the
+        // nearest canonical range so old bookmarks keep working.
+        if ($range === '' && $request->getQueryParam('hours') !== null) {
+            $legacy = max(1, (int)$request->getQueryParam('hours', 24));
+            $range = match (true) {
+                $legacy <= 24 => '24h',
+                $legacy <= 48 => '48h',
+                $legacy <= 168 => '7d',
+                $legacy <= 720 => '30d',
+                default => '90d',
+            };
+        }
+
+        if (!in_array($range, self::MONITOR_RANGES, true)) {
+            $range = '24h';
+        }
+
+        $useDaily = !in_array($range, ['24h', '48h'], true);
+        $now = new \DateTime();
+
+        // Anchor = end of the plotted window, rounded down to the
+        // current bucket so the most recent bar is fully populated.
+        // Start = beginning of the window.
+        $anchor = clone $now;
         if ($useDaily) {
             $anchor->setTime(0, 0);
         } else {
             $anchor->setTime((int)$anchor->format('H'), 0);
         }
 
-        $cutoff = (clone $anchor)->modify('-' . ($bucketCount - 1) . ($useDaily ? ' days' : ' hours'));
-        $cutoffStr = $cutoff->format('Y-m-d H:i:s');
+        switch ($range) {
+            case '48h':
+                $start = (clone $anchor)->modify('-47 hours');
+                break;
+            case '7d':
+                $start = (clone $anchor)->modify('-6 days');
+                break;
+            case 'month':
+                $start = new \DateTime('first day of this month 00:00');
+                break;
+            case '30d':
+                $start = (clone $anchor)->modify('-29 days');
+                break;
+            case '90d':
+                $start = (clone $anchor)->modify('-89 days');
+                break;
+            case '24h':
+            default:
+                $start = (clone $anchor)->modify('-23 hours');
+                break;
+        }
+
+        $bucketFormat = $useDaily ? 'Y-m-d' : 'Y-m-d H';
+        $cutoffStr = $start->format('Y-m-d H:i:s');
 
         // Initialize ordered bucket array so empty periods still show
-        // up as zero bars (a flat gap would otherwise look like "nothing
-        // happened" when really the chart just wasn't asked about it).
+        // up as zero values (a flat gap would otherwise look like
+        // "nothing happened" when really the chart just wasn't asked
+        // about it).
         $buckets = [];
-        for ($i = $bucketCount - 1; $i >= 0; $i--) {
-            $bucket = (clone $anchor)->modify('-' . $i . ($useDaily ? ' days' : ' hours'));
-            $key = $bucket->format($bucketFormat);
+        $cursor = clone $start;
+        while ($cursor <= $anchor) {
+            $key = $cursor->format($bucketFormat);
             $buckets[$key] = [
                 'key' => $key,
-                'label' => $bucket->format($useDaily ? 'M j' : 'H:00'),
-                'iso' => $bucket->format('c'),
+                'label' => $cursor->format($useDaily ? 'M j' : 'H:00'),
+                // Richer label shown in the hover tooltip — never
+                // truncated by axis spacing.
+                'tooltipLabel' => $cursor->format($useDaily ? 'D, M j' : 'M j, H:00'),
+                'iso' => $cursor->format('c'),
                 'count' => 0,
             ];
+            $cursor->modify($useDaily ? '+1 day' : '+1 hour');
         }
 
         // Fetch only dateCreated; we bucket in PHP so this stays
@@ -164,9 +220,10 @@ class ActivityController extends Controller
             ->select(['dateCreated'])
             ->from('{{%user_activity_log}}')
             ->andWhere(['>=', 'dateCreated', $cutoffStr]);
-        if ($eventType !== '') $query->andWhere(['eventType' => $eventType]);
-        if ($context !== '') $query->andWhere(['context' => $context]);
-        if ($client !== '') $query->andWhere(['client' => $client]);
+        // Yii's hash-condition turns an array value into SQL IN (...).
+        if ($eventTypes) $query->andWhere(['eventType' => $eventTypes]);
+        if ($contexts) $query->andWhere(['context' => $contexts]);
+        if ($clients) $query->andWhere(['client' => $clients]);
 
         foreach ($query->each(1000) as $row) {
             $key = (new \DateTime($row['dateCreated']))->format($bucketFormat);
@@ -203,18 +260,22 @@ class ActivityController extends Controller
             }
         }
 
-        [$linePath, $areaPath] = $this->buildSmoothPath($points, $baseY, $padX);
+        // Clamp control-point Y values inside the plot area so a
+        // Catmull-Rom overshoot can never dip the curve below the
+        // x-axis (= zero count) — showing a rendered "negative"
+        // segment is confusing and factually wrong.
+        [$linePath, $areaPath] = $this->buildSmoothPath($points, $baseY, $padX, $padY);
 
         // Stat cards: totals per event type within the same window,
         // respecting context and client filters (but not the event
         // filter — the cards exist to compare event types).
-        $statCard = function (string $type) use ($cutoffStr, $context, $client): int {
+        $statCard = function (string $type) use ($cutoffStr, $contexts, $clients): int {
             $q = (new \yii\db\Query())
                 ->from('{{%user_activity_log}}')
                 ->andWhere(['eventType' => $type])
                 ->andWhere(['>=', 'dateCreated', $cutoffStr]);
-            if ($context !== '') $q->andWhere(['context' => $context]);
-            if ($client !== '') $q->andWhere(['client' => $client]);
+            if ($contexts) $q->andWhere(['context' => $contexts]);
+            if ($clients) $q->andWhere(['client' => $clients]);
             return (int)$q->count();
         };
 
@@ -225,15 +286,31 @@ class ActivityController extends Controller
             'blocked' => $statCard(ActivityLogService::EVENT_LOGIN_BLOCKED),
         ];
 
+        // Y-axis tick values. 5 evenly-spaced ticks from 0 to maxCount,
+        // rendered at 0/25/50/75/100 % of the plot height. The values
+        // are always integers (event counts) — floor for a clean look,
+        // except the top which is always the real max.
+        $effectiveMax = max(1, $maxCount);
+        $yTicks = [];
+        for ($i = 4; $i >= 0; $i--) {
+            $pct = $i / 4;
+            $value = $i === 4 ? $effectiveMax : (int)floor($effectiveMax * $pct);
+            $yTicks[] = [
+                'value' => $value,
+                'y' => $padY + $plotHeight * (1 - $pct),
+            ];
+        }
+
         return $this->renderTemplate('user-audit/monitor', [
             'buckets' => $bucketList,
-            'maxCount' => max(1, $maxCount),
+            'maxCount' => $effectiveMax,
+            'yTicks' => $yTicks,
             'useDaily' => $useDaily,
-            'windowHours' => $windowHours,
+            'range' => $range,
             'stats' => $stats,
-            'eventType' => $eventType,
-            'context' => $context,
-            'client' => $client,
+            'eventTypes' => $eventTypes,
+            'contexts' => $contexts,
+            'clients' => $clients,
             'chartWidth' => $chartWidth,
             'chartHeight' => $chartHeight,
             'chartPadX' => $padX,
@@ -257,13 +334,18 @@ class ActivityController extends Controller
      * @param array<int,array{0:float,1:float}> $points
      * @return array{0:string,1:string}
      */
-    private function buildSmoothPath(array $points, float $baseY, float $padX): array
+    private function buildSmoothPath(array $points, float $baseY, float $padX, float $padY): array
     {
         $n = count($points);
         if ($n === 0) {
             return ['', ''];
         }
         $fmt = static fn(float $v): string => rtrim(rtrim(number_format($v, 2, '.', ''), '0'), '.');
+        // Bezier control-point clamp: SVG Y grows downward, so $padY is
+        // the top (= max count) and $baseY the bottom (= 0). Keeping CP
+        // Y values inside [padY, baseY] prevents the Catmull-Rom curve
+        // from overshooting below the x-axis or above the chart area.
+        $clampY = static fn(float $y): float => max($padY, min($baseY, $y));
 
         $line = 'M ' . $fmt($points[0][0]) . ',' . $fmt($points[0][1]);
         if ($n === 1) {
@@ -276,9 +358,9 @@ class ActivityController extends Controller
                 $p2 = $points[$i + 1];
                 $p3 = $points[min($n - 1, $i + 2)];
                 $c1x = $p1[0] + ($p2[0] - $p0[0]) * $tension;
-                $c1y = $p1[1] + ($p2[1] - $p0[1]) * $tension;
+                $c1y = $clampY($p1[1] + ($p2[1] - $p0[1]) * $tension);
                 $c2x = $p2[0] - ($p3[0] - $p1[0]) * $tension;
-                $c2y = $p2[1] - ($p3[1] - $p1[1]) * $tension;
+                $c2y = $clampY($p2[1] - ($p3[1] - $p1[1]) * $tension);
                 $line .= ' C ' . $fmt($c1x) . ',' . $fmt($c1y)
                        . ' ' . $fmt($c2x) . ',' . $fmt($c2y)
                        . ' ' . $fmt($p2[0]) . ',' . $fmt($p2[1]);
@@ -292,6 +374,31 @@ class ActivityController extends Controller
               . ' L ' . $fmt($last[0]) . ',' . $fmt($baseY) . ' Z';
 
         return [$line, $area];
+    }
+
+    /**
+     * Normalizes a multi-select query param into an array of accepted
+     * string values. Accepts arrays (?foo[]=a&foo[]=b), a single scalar
+     * (?foo=a) or empty/missing. Anything outside $allowed is dropped —
+     * the URL is user-provided so we never let arbitrary values reach
+     * an SQL IN clause.
+     *
+     * @param string[] $allowed
+     * @return string[]
+     */
+    private function multiParam(\yii\web\Request $request, string $name, array $allowed): array
+    {
+        $raw = $request->getQueryParam($name);
+        if ($raw === null || $raw === '') return [];
+        $values = is_array($raw) ? $raw : [(string)$raw];
+        $clean = [];
+        foreach ($values as $v) {
+            $v = (string)$v;
+            if ($v !== '' && in_array($v, $allowed, true) && !in_array($v, $clean, true)) {
+                $clean[] = $v;
+            }
+        }
+        return $clean;
     }
 
     /**
