@@ -3,6 +3,31 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.6.0 - 2026-04-23
+
+### Added
+- Monitor chart is now multi-series: one colored line per event type
+  (`login`, `logout`, `login_failed`, `login_blocked`, `session_expired`).
+  The line colors match the swatches next to each event checkbox in
+  the filter dropdown, and a legend appears below the chart when more
+  than one series is visible.
+- Event / context / client checkbox dropdowns gain an *All* / *None*
+  toggle at the top — one click to reset a dimension.
+- Filter defaults: first-time visits now show every event / context /
+  client pre-selected (full dataset out of the box). A hidden
+  `_filters` sentinel lets the form legitimately submit "none selected"
+  without being mistaken for a fresh page load.
+- Hover tooltip lists every visible series' count at the hovered
+  bucket with a matching color dot, plus a Σ total when more than one
+  series is shown. A dashed vertical guide line and per-series accent
+  dots highlight the active column.
+
+### Fixed
+- Nav: main "User Audit" item now stays highlighted (subnav open)
+  while on the Monitor page. Parent URL was pointing at /logs, which
+  made Craft's prefix-match consider /monitor an unrelated top-level
+  URL. Restored to the plugin root.
+
 ## 1.5.0 - 2026-04-23
 
 ### Added

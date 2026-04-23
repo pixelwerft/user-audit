@@ -110,6 +110,31 @@ class ActivityController extends Controller
     private const MONITOR_RANGES = ['24h', '48h', '7d', 'month', '30d', '90d'];
 
     /**
+     * Chart color per event type — one line per type, the swatch next
+     * to each event checkbox matches the line in the graph. Keep the
+     * keys aligned with ActivityLogService::EVENT_* constants.
+     */
+    private const MONITOR_EVENT_COLORS = [
+        'login'           => '#16a34a', // green
+        'logout'          => '#64748b', // slate
+        'login_failed'    => '#ea580c', // orange
+        'login_blocked'   => '#dc2626', // red
+        'session_expired' => '#0ea5e9', // sky
+    ];
+
+    /** Decorative swatch colors for the context checkbox dropdown. */
+    private const MONITOR_CONTEXT_COLORS = [
+        'cp' => '#6366f1',
+        'fe' => '#06b6d4',
+    ];
+
+    /** Decorative swatch colors for the client checkbox dropdown. */
+    private const MONITOR_CLIENT_COLORS = [
+        'pwa'     => '#f59e0b',
+        'browser' => '#64748b',
+    ];
+
+    /**
      * Monitor: pure time-series dashboard. Renders a bucketed line
      * chart of event activity for the selected range, filterable by
      * event type, context and client — the same dropdowns the log
@@ -130,13 +155,29 @@ class ActivityController extends Controller
         $request = Craft::$app->getRequest();
         $range = (string)$request->getQueryParam('range', '');
 
+        $allEventTypes = array_keys(self::MONITOR_EVENT_COLORS);
+        $allContexts = array_keys(self::MONITOR_CONTEXT_COLORS);
+        $allClients = array_keys(self::MONITOR_CLIENT_COLORS);
+
         // Filters are multi-select: URLs carry ?event[]=login&event[]=logout etc.
         // A bare ?event=login string is also accepted for backwards compat.
-        $eventTypes = $this->multiParam($request, 'event', [
-            'login', 'logout', 'login_failed', 'login_blocked', 'session_expired',
-        ]);
-        $contexts = $this->multiParam($request, 'context', ['cp', 'fe']);
-        $clients = $this->multiParam($request, 'client', ['pwa', 'browser']);
+        $eventTypes = $this->multiParam($request, 'event', $allEventTypes);
+        $contexts = $this->multiParam($request, 'context', $allContexts);
+        $clients = $this->multiParam($request, 'client', $allClients);
+
+        // Sentinel: the filter form always posts `_filters=1`. Its
+        // absence means "URL was opened without the form being
+        // submitted" (first visit, a bookmark to /monitor, a link
+        // from elsewhere) — in that case we default to "everything
+        // selected" so the dashboard is immediately useful. A real
+        // submit with no boxes checked IS respected and produces an
+        // empty chart.
+        $filtersSubmitted = $request->getQueryParam('_filters') === '1';
+        if (!$filtersSubmitted) {
+            $eventTypes = $allEventTypes;
+            $contexts = $allContexts;
+            $clients = $allClients;
+        }
 
         // Legacy support: pre-1.5 URLs carried ?hours=. Map them to the
         // nearest canonical range so old bookmarks keep working.
@@ -193,78 +234,120 @@ class ActivityController extends Controller
         $bucketFormat = $useDaily ? 'Y-m-d' : 'Y-m-d H';
         $cutoffStr = $start->format('Y-m-d H:i:s');
 
-        // Initialize ordered bucket array so empty periods still show
-        // up as zero values (a flat gap would otherwise look like
-        // "nothing happened" when really the chart just wasn't asked
-        // about it).
-        $buckets = [];
+        // Bucket skeleton with shared x-axis labels — every series
+        // re-uses this structure so they line up pixel-perfect.
+        $bucketMeta = [];
         $cursor = clone $start;
         while ($cursor <= $anchor) {
             $key = $cursor->format($bucketFormat);
-            $buckets[$key] = [
+            $bucketMeta[$key] = [
                 'key' => $key,
                 'label' => $cursor->format($useDaily ? 'M j' : 'H:00'),
                 // Richer label shown in the hover tooltip — never
                 // truncated by axis spacing.
                 'tooltipLabel' => $cursor->format($useDaily ? 'D, M j' : 'M j, H:00'),
                 'iso' => $cursor->format('c'),
-                'count' => 0,
             ];
             $cursor->modify($useDaily ? '+1 day' : '+1 hour');
         }
 
-        // Fetch only dateCreated; we bucket in PHP so this stays
-        // portable across MySQL/MariaDB/Postgres (date-format SQL
-        // varies by driver and isn't worth the abstraction cost here).
-        $query = (new \yii\db\Query())
-            ->select(['dateCreated'])
-            ->from('{{%user_activity_log}}')
-            ->andWhere(['>=', 'dateCreated', $cutoffStr]);
-        // Yii's hash-condition turns an array value into SQL IN (...).
-        if ($eventTypes) $query->andWhere(['eventType' => $eventTypes]);
-        if ($contexts) $query->andWhere(['context' => $contexts]);
-        if ($clients) $query->andWhere(['client' => $clients]);
+        // Per-series counts. Index: [eventType][bucketKey] = int.
+        // Initialize all selected event types with zeroed buckets so
+        // a series with no data still plots a flat zero line instead
+        // of disappearing entirely.
+        $seriesCounts = [];
+        foreach ($eventTypes as $et) {
+            $seriesCounts[$et] = array_fill_keys(array_keys($bucketMeta), 0);
+        }
 
-        foreach ($query->each(1000) as $row) {
-            $key = (new \DateTime($row['dateCreated']))->format($bucketFormat);
-            if (isset($buckets[$key])) {
-                $buckets[$key]['count']++;
+        // Fetch dateCreated + eventType; bucket in PHP so the SQL
+        // stays portable across MySQL/MariaDB/Postgres. Short-circuit
+        // when nothing is selected — avoids a full-table scan with an
+        // empty IN clause (different drivers handle that differently).
+        if ($eventTypes && $contexts && $clients) {
+            $query = (new \yii\db\Query())
+                ->select(['dateCreated', 'eventType'])
+                ->from('{{%user_activity_log}}')
+                ->andWhere(['>=', 'dateCreated', $cutoffStr])
+                ->andWhere(['eventType' => $eventTypes])
+                ->andWhere(['context' => $contexts])
+                ->andWhere(['client' => $clients]);
+
+            foreach ($query->each(1000) as $row) {
+                $key = (new \DateTime($row['dateCreated']))->format($bucketFormat);
+                $et = $row['eventType'];
+                if (isset($seriesCounts[$et][$key])) {
+                    $seriesCounts[$et][$key]++;
+                }
             }
         }
 
-        $bucketList = array_values($buckets);
+        // Overall max across ALL series for a shared y-axis — without
+        // it, each line would auto-scale independently and "looks big"
+        // would be misleading.
         $maxCount = 0;
-        foreach ($bucketList as $b) {
-            if ($b['count'] > $maxCount) $maxCount = $b['count'];
+        foreach ($seriesCounts as $counts) {
+            $localMax = $counts ? max($counts) : 0;
+            if ($localMax > $maxCount) $maxCount = $localMax;
+        }
+
+        // Legacy consumer (x-axis labels, widow-hint text) expects a
+        // single list of bucket meta. Attach the total across series
+        // for the tooltip summary row.
+        $bucketList = [];
+        foreach ($bucketMeta as $key => $meta) {
+            $total = 0;
+            foreach ($seriesCounts as $counts) {
+                $total += $counts[$key] ?? 0;
+            }
+            $bucketList[] = $meta + ['count' => $total];
         }
 
         // SVG chart geometry — rendered at a fixed viewBox, CSS scales
-        // it responsively. Padding keeps the curve off the axes so
-        // stroke weight stays visible at the extremes.
+        // it responsively. Extra left padding leaves room for Y-axis
+        // tick labels; the rest keeps curves off the edges so stroke
+        // weight stays visible at the extremes.
         $chartWidth = 960;
         $chartHeight = 240;
-        $padX = 24;
+        $padLeft = 38;
+        $padRight = 16;
         $padY = 16;
-        $plotWidth = $chartWidth - 2 * $padX;
+        $plotWidth = $chartWidth - $padLeft - $padRight;
         $plotHeight = $chartHeight - 2 * $padY;
         $baseY = $chartHeight - $padY;
+        $effectiveMax = max(1, $maxCount);
         $n = count($bucketList);
 
-        $points = [];
-        if ($n > 0) {
-            $stepX = $n > 1 ? $plotWidth / ($n - 1) : 0;
-            foreach ($bucketList as $i => $b) {
-                $x = $padX + $i * $stepX;
-                $y = $baseY - ($plotHeight * $b['count'] / max(1, $maxCount));
-                $points[] = [$x, $y];
-            }
-        }
+        // Build one series per selected event type. X coordinates are
+        // shared across all series so a mousemove at column i lines
+        // up across every line.
+        $series = [];
+        $stepX = $n > 1 ? $plotWidth / ($n - 1) : 0;
 
-        // Clamp control-point Y values inside the plot area so a
-        // Catmull-Rom overshoot can never dip the curve below the
-        // x-axis (= zero count) — showing a rendered "negative"
-        // segment is confusing and factually wrong.
-        [$linePath, $areaPath] = $this->buildSmoothPath($points, $baseY, $padX, $padY);
+        foreach ($eventTypes as $et) {
+            $counts = $seriesCounts[$et] ?? [];
+            $points = [];
+            $i = 0;
+            foreach ($bucketMeta as $key => $_) {
+                $count = $counts[$key] ?? 0;
+                $x = $padLeft + $i * $stepX;
+                $y = $baseY - ($plotHeight * $count / $effectiveMax);
+                $points[] = ['x' => $x, 'y' => $y, 'count' => $count];
+                $i++;
+            }
+
+            $rawPoints = array_map(fn($p) => [$p['x'], $p['y']], $points);
+            // Clamp control points inside the plot so a Catmull-Rom
+            // overshoot can't dip below the x-axis (= zero count).
+            [$linePath] = $this->buildSmoothPath($rawPoints, $baseY, $padLeft, $padY);
+
+            $series[] = [
+                'key' => $et,
+                'color' => self::MONITOR_EVENT_COLORS[$et] ?? '#2f80ed',
+                'linePath' => $linePath,
+                'points' => $points,
+            ];
+        }
 
         // Stat cards: totals per event type within the same window,
         // respecting context and client filters (but not the event
@@ -286,11 +369,8 @@ class ActivityController extends Controller
             'blocked' => $statCard(ActivityLogService::EVENT_LOGIN_BLOCKED),
         ];
 
-        // Y-axis tick values. 5 evenly-spaced ticks from 0 to maxCount,
-        // rendered at 0/25/50/75/100 % of the plot height. The values
-        // are always integers (event counts) — floor for a clean look,
-        // except the top which is always the real max.
-        $effectiveMax = max(1, $maxCount);
+        // Y-axis tick values. 5 evenly-spaced ticks from 0 to max,
+        // rendered at 0/25/50/75/100 % of the plot height.
         $yTicks = [];
         for ($i = 4; $i >= 0; $i--) {
             $pct = $i / 4;
@@ -311,13 +391,15 @@ class ActivityController extends Controller
             'eventTypes' => $eventTypes,
             'contexts' => $contexts,
             'clients' => $clients,
+            'eventColors' => self::MONITOR_EVENT_COLORS,
+            'contextColors' => self::MONITOR_CONTEXT_COLORS,
+            'clientColors' => self::MONITOR_CLIENT_COLORS,
             'chartWidth' => $chartWidth,
             'chartHeight' => $chartHeight,
-            'chartPadX' => $padX,
+            'chartPadLeft' => $padLeft,
+            'chartPadRight' => $padRight,
             'chartPadY' => $padY,
-            'chartPoints' => $points,
-            'chartLinePath' => $linePath,
-            'chartAreaPath' => $areaPath,
+            'chartSeries' => $series,
         ]);
     }
 

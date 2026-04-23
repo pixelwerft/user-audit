@@ -31,7 +31,15 @@
   { value: '90d',   label: 'Last 90 days'|t('user-audit') },
 ] %}
 
-{% set hasFilter = eventTypes|length or contexts|length or clients|length or range != '24h' %}
+{# "Reset" only makes sense when the user has narrowed something away from
+   the all-selected / 24h default. #}
+{% set totalEvents = eventOptions|length %}
+{% set totalContexts = contextOptions|length %}
+{% set totalClients = clientOptions|length %}
+{% set hasFilter = eventTypes|length != totalEvents
+               or contexts|length != totalContexts
+               or clients|length != totalClients
+               or range != '24h' %}
 
 {% block content %}
 
@@ -43,74 +51,60 @@
 
 <form id="user-audit-monitor-filter" method="get" action="{{ cpUrl('user-audit/monitor') }}"
       style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 1rem;">
+  {# Sentinel: distinguishes "form submitted with no boxes checked" from
+     "URL opened cold". See actionMonitor() for the full rationale. #}
+  <input type="hidden" name="_filters" value="1">
 
-  {# --- Multiselect: event --- #}
-  <div class="ua-multiselect" data-placeholder="{{ 'All events'|t('user-audit') }}">
-    <button type="button" class="btn menubtn ua-ms-toggle">
-      <span class="ua-ms-label">
-        {% if eventTypes|length %}
-          {{ eventTypes|length }} × {{ 'event'|t('user-audit') }}
-        {% else %}
-          {{ 'All events'|t('user-audit') }}
-        {% endif %}
-      </span>
-    </button>
-    <div class="ua-ms-panel" hidden>
-      {% for opt in eventOptions %}
-        <label class="ua-ms-option">
-          <input type="checkbox" name="event[]" value="{{ opt.value }}"
-                 {% if opt.value in eventTypes %}checked{% endif %}>
-          <span>{{ opt.label }}</span>
-        </label>
-      {% endfor %}
+  {% macro multiselect(name, options, selected, colorMap, placeholder, singleLabel, multipleLabel) %}
+    <div class="ua-multiselect" data-name="{{ name }}">
+      <button type="button" class="btn menubtn ua-ms-toggle">
+        <span class="ua-ms-label">
+          {% if selected|length == 0 %}
+            {{ 'None selected'|t('user-audit') }}
+          {% elseif selected|length == options|length %}
+            {{ placeholder }}
+          {% elseif selected|length == 1 %}
+            {{ singleLabel }}: {{ selected|first }}
+          {% else %}
+            {{ selected|length }} {{ multipleLabel }}
+          {% endif %}
+        </span>
+      </button>
+      <div class="ua-ms-panel" hidden>
+        <div class="ua-ms-toolbar">
+          <button type="button" class="ua-ms-toolbtn" data-ua-ms-all>{{ 'All'|t('user-audit') }}</button>
+          <span style="opacity: 0.4;">·</span>
+          <button type="button" class="ua-ms-toolbtn" data-ua-ms-none>{{ 'None'|t('user-audit') }}</button>
+        </div>
+        {% for opt in options %}
+          <label class="ua-ms-option">
+            <input type="checkbox" name="{{ name }}[]" value="{{ opt.value }}"
+                   {% if opt.value in selected %}checked{% endif %}>
+            {% if colorMap[opt.value] is defined %}
+              <span class="ua-ms-swatch" style="background: {{ colorMap[opt.value] }};"></span>
+            {% endif %}
+            <span>{{ opt.label }}</span>
+          </label>
+        {% endfor %}
+      </div>
     </div>
-  </div>
+  {% endmacro %}
 
-  {# --- Multiselect: context --- #}
-  <div class="ua-multiselect" data-placeholder="{{ 'All contexts'|t('user-audit') }}">
-    <button type="button" class="btn menubtn ua-ms-toggle">
-      <span class="ua-ms-label">
-        {% if contexts|length %}
-          {{ contexts|length }} × {{ 'context'|t('user-audit') }}
-        {% else %}
-          {{ 'All contexts'|t('user-audit') }}
-        {% endif %}
-      </span>
-    </button>
-    <div class="ua-ms-panel" hidden>
-      {% for opt in contextOptions %}
-        <label class="ua-ms-option">
-          <input type="checkbox" name="context[]" value="{{ opt.value }}"
-                 {% if opt.value in contexts %}checked{% endif %}>
-          <span>{{ opt.label }}</span>
-        </label>
-      {% endfor %}
-    </div>
-  </div>
+  {{ _self.multiselect('event', eventOptions, eventTypes, eventColors,
+      'All events'|t('user-audit'),
+      'Event'|t('user-audit'),
+      'events'|t('user-audit')) }}
 
-  {# --- Multiselect: client --- #}
-  <div class="ua-multiselect" data-placeholder="{{ 'All clients'|t('user-audit') }}">
-    <button type="button" class="btn menubtn ua-ms-toggle">
-      <span class="ua-ms-label">
-        {% if clients|length %}
-          {{ clients|length }} × {{ 'client'|t('user-audit') }}
-        {% else %}
-          {{ 'All clients'|t('user-audit') }}
-        {% endif %}
-      </span>
-    </button>
-    <div class="ua-ms-panel" hidden>
-      {% for opt in clientOptions %}
-        <label class="ua-ms-option">
-          <input type="checkbox" name="client[]" value="{{ opt.value }}"
-                 {% if opt.value in clients %}checked{% endif %}>
-          <span>{{ opt.label }}</span>
-        </label>
-      {% endfor %}
-    </div>
-  </div>
+  {{ _self.multiselect('context', contextOptions, contexts, contextColors,
+      'All contexts'|t('user-audit'),
+      'Context'|t('user-audit'),
+      'contexts'|t('user-audit')) }}
 
-  {# --- Range select (single-choice, kept as a native select for keyboard-nav parity) --- #}
+  {{ _self.multiselect('client', clientOptions, clients, clientColors,
+      'All clients'|t('user-audit'),
+      'Client'|t('user-audit'),
+      'clients'|t('user-audit')) }}
+
   <div class="select">
     <select name="range" data-ua-live-select>
       {% for opt in rangeOptions %}
@@ -144,69 +138,75 @@
   </div>
 </div>
 
-{# Precompute the JS payload once so the hover handler doesn't have to
-   walk the DOM to find each point. #}
-{% set pointsJson = [] %}
-{% for i, p in chartPoints %}
-  {% set pointsJson = pointsJson|merge([{
-    x: p.0,
-    y: p.1,
-    label: buckets[i].tooltipLabel,
-    count: buckets[i].count,
+{# Flat payload the tooltip JS walks to find the nearest bucket. We pass
+   series + bucket labels in two arrays of equal length (bucketLabels
+   has one entry per x-column, chartSeries has one entry per line). #}
+{% set bucketLabelsJson = [] %}
+{% for b in buckets %}
+  {% set bucketLabelsJson = bucketLabelsJson|merge([b.tooltipLabel]) %}
+{% endfor %}
+
+{% set seriesJson = [] %}
+{% for s in chartSeries %}
+  {% set seriesJson = seriesJson|merge([{
+    key: s.key,
+    color: s.color,
+    points: s.points,
   }]) %}
 {% endfor %}
 
 <div class="ua-chart-wrap" style="position: relative; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1rem; background: #fff;">
   <svg class="ua-chart" viewBox="0 0 {{ chartWidth }} {{ chartHeight }}" preserveAspectRatio="none"
-       data-points="{{ pointsJson|json_encode }}"
+       data-series="{{ seriesJson|json_encode }}"
+       data-labels="{{ bucketLabelsJson|json_encode }}"
        data-vb-width="{{ chartWidth }}"
        data-vb-height="{{ chartHeight }}"
        style="width: 100%; height: 260px; display: block; cursor: crosshair;"
        aria-label="{{ 'Activity over time'|t('user-audit') }}">
-    <defs>
-      <linearGradient id="uaChartFill" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#2f80ed" stop-opacity="0.35"/>
-        <stop offset="100%" stop-color="#2f80ed" stop-opacity="0.02"/>
-      </linearGradient>
-    </defs>
 
-    {# Horizontal gridlines with Y-axis tick labels. The top/bottom
-       lines double as the plot boundary; the others are subtle. #}
+    {# Y-axis gridlines + numeric ticks #}
     {% for tick in yTicks %}
-      <line x1="{{ chartPadX }}" y1="{{ tick.y }}" x2="{{ chartWidth - chartPadX }}" y2="{{ tick.y }}"
+      <line x1="{{ chartPadLeft }}" y1="{{ tick.y }}" x2="{{ chartWidth - chartPadRight }}" y2="{{ tick.y }}"
             stroke="{{ loop.first or loop.last ? '#d0d0d0' : '#eee' }}" stroke-width="1"/>
-      <text x="{{ chartPadX - 6 }}" y="{{ tick.y + 3 }}" text-anchor="end"
+      <text x="{{ chartPadLeft - 6 }}" y="{{ tick.y + 3 }}" text-anchor="end"
             font-size="10" fill="#888" font-family="system-ui, sans-serif">{{ tick.value }}</text>
     {% endfor %}
 
-    {% if chartAreaPath %}
-      <path d="{{ chartAreaPath }}" fill="url(#uaChartFill)" stroke="none"/>
-    {% endif %}
-    {% if chartLinePath %}
-      <path d="{{ chartLinePath }}" fill="none" stroke="#2f80ed" stroke-width="2.25"
-            stroke-linejoin="round" stroke-linecap="round"/>
-    {% endif %}
-
-    {# Static data dots. No <title> on these — the interactive overlay
-       tooltip would otherwise compete with the browser's native one. #}
-    {% for p in chartPoints %}
-      <circle cx="{{ p.0 }}" cy="{{ p.1 }}" r="3" fill="#fff" stroke="#2f80ed" stroke-width="1.75"/>
+    {# One stroke path per series. No area fill here — multiple
+       overlapping filled areas quickly turn into mud. #}
+    {% for s in chartSeries %}
+      {% if s.linePath %}
+        <path d="{{ s.linePath }}" fill="none" stroke="{{ s.color }}" stroke-width="2"
+              stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/>
+      {% endif %}
     {% endfor %}
 
-    {# Moving highlight marker, positioned by JS on hover. #}
-    <circle class="ua-marker" r="5" fill="#2f80ed" stroke="#fff" stroke-width="2" opacity="0" cx="0" cy="0"/>
+    {# Static data dots, color-matched to the line. #}
+    {% for s in chartSeries %}
+      {% for p in s.points %}
+        <circle cx="{{ p.x }}" cy="{{ p.y }}" r="2.25" fill="#fff" stroke="{{ s.color }}" stroke-width="1.5"/>
+      {% endfor %}
+    {% endfor %}
+
+    {# Vertical hover-line + per-series accent dots, positioned by JS. #}
+    <line class="ua-hover-line" x1="0" y1="{{ chartPadY }}" x2="0" y2="{{ chartHeight - chartPadY }}"
+          stroke="#999" stroke-width="1" stroke-dasharray="3,3" opacity="0"/>
+    {% for s in chartSeries %}
+      <circle class="ua-hover-dot" data-series="{{ s.key }}" r="4" fill="{{ s.color }}" stroke="#fff"
+              stroke-width="1.5" opacity="0" cx="0" cy="0"/>
+    {% endfor %}
   </svg>
 
-  <div class="ua-tooltip" style="position: absolute; display: none; transform: translate(-50%, calc(-100% - 12px));
-       background: #1f2937; color: #fff; padding: 6px 10px; border-radius: 4px; font-size: 0.75rem;
-       pointer-events: none; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,0.18); z-index: 10;">
-    <div class="ua-tooltip-label" style="font-weight: 500;"></div>
-    <div class="ua-tooltip-count" style="opacity: 0.85;"></div>
+  <div class="ua-tooltip" style="position: absolute; display: none; transform: translate(-50%, calc(-100% - 16px));
+       background: #1f2937; color: #fff; padding: 8px 12px; border-radius: 5px; font-size: 0.75rem;
+       pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,0.18); z-index: 10; min-width: 160px;">
+    <div class="ua-tooltip-label" style="font-weight: 600; margin-bottom: 4px;"></div>
+    <div class="ua-tooltip-rows"></div>
   </div>
 
-  {# X-axis labels — thinned for dense windows so the axis stays readable. #}
+  {# X-axis labels — thinned for dense windows. #}
   {% set labelStep = buckets|length > 24 ? (buckets|length / 8)|round(0, 'ceil') : 2 %}
-  <div style="display: flex; justify-content: space-between; margin-top: 0.35rem; padding: 0 {{ chartPadX / chartWidth * 100 }}%; font-size: 0.7rem; color: #888;">
+  <div style="display: flex; justify-content: space-between; margin-top: 0.35rem; padding-left: {{ chartPadLeft / chartWidth * 100 }}%; padding-right: {{ chartPadRight / chartWidth * 100 }}%; font-size: 0.7rem; color: #888;">
     {% for i, b in buckets %}
       {% if i % labelStep == 0 or i == buckets|length - 1 %}
         <span>{{ b.label }}</span>
@@ -214,6 +214,19 @@
     {% endfor %}
   </div>
 </div>
+
+{# Legend — matches the color swatches in the event dropdown. Only shown
+   when more than one series is active so we don't waste vertical space. #}
+{% if chartSeries|length > 1 %}
+  <div style="display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; margin-top: 0.75rem; font-size: 0.8rem;">
+    {% for s in chartSeries %}
+      <span style="display: inline-flex; align-items: center; gap: 0.4rem;">
+        <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: {{ s.color }};"></span>
+        <code style="font-size: 0.8rem;">{{ s.key }}</code>
+      </span>
+    {% endfor %}
+  </div>
+{% endif %}
 
 <p class="light" style="margin-top: 0.75rem; font-size: 0.8rem;">
   {{ 'Bucket size'|t('user-audit') }}:
@@ -227,14 +240,33 @@
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  min-width: 180px;
+  min-width: 200px;
   background: #fff;
   border: 1px solid #cdcdcd;
   border-radius: 5px;
   box-shadow: 0 4px 14px rgba(0,0,0,0.12);
-  padding: 0.35rem 0;
+  padding: 0.25rem 0 0.35rem;
   z-index: 20;
 }
+.ua-ms-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem 0.5rem;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 0.25rem;
+  font-size: 0.75rem;
+}
+.ua-ms-toolbtn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: #2563eb;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.ua-ms-toolbtn:hover { text-decoration: underline; }
 .ua-ms-option {
   display: flex;
   align-items: center;
@@ -246,6 +278,13 @@
 }
 .ua-ms-option:hover { background: #f3f4f6; }
 .ua-ms-option input[type="checkbox"] { margin: 0; }
+.ua-ms-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
 {% endcss %}
 
 {% js %}
@@ -258,15 +297,26 @@
 
     toggle.addEventListener('click', function (e) {
       e.stopPropagation();
-      // Close any other open panel first so only one is visible at a time.
       document.querySelectorAll('.ua-ms-panel').forEach(function (p) {
         if (p !== panel) p.setAttribute('hidden', '');
       });
       if (panel.hasAttribute('hidden')) panel.removeAttribute('hidden');
       else panel.setAttribute('hidden', '');
     });
-
     panel.addEventListener('click', function (e) { e.stopPropagation(); });
+
+    // All / None toggles. Only touches the checkboxes; the form is
+    // submitted via the outer Apply button so the user can stack
+    // several All/None clicks before committing.
+    var all = panel.querySelector('[data-ua-ms-all]');
+    var none = panel.querySelector('[data-ua-ms-none]');
+    var boxes = panel.querySelectorAll('input[type="checkbox"]');
+    if (all) all.addEventListener('click', function () {
+      boxes.forEach(function (b) { b.checked = true; });
+    });
+    if (none) none.addEventListener('click', function () {
+      boxes.forEach(function (b) { b.checked = false; });
+    });
   });
 
   document.addEventListener('click', function () {
@@ -275,7 +325,7 @@
     });
   });
 
-  // --- Range select submits immediately (single-choice, no Apply needed) --
+  // --- Range select submits immediately (single-choice) --------------------
   var form = document.getElementById('user-audit-monitor-filter');
   if (form) {
     form.querySelectorAll('[data-ua-live-select]').forEach(function (el) {
@@ -283,51 +333,96 @@
     });
   }
 
-  // --- Chart hover tooltip -------------------------------------------------
+  // --- Multi-series hover tooltip -----------------------------------------
   var svg = document.querySelector('.ua-chart');
   if (!svg) return;
-  var wrap    = svg.closest('.ua-chart-wrap');
-  var tooltip = wrap.querySelector('.ua-tooltip');
-  var marker  = svg.querySelector('.ua-marker');
-  var labelEl = tooltip.querySelector('.ua-tooltip-label');
-  var countEl = tooltip.querySelector('.ua-tooltip-count');
+  var wrap     = svg.closest('.ua-chart-wrap');
+  var tooltip  = wrap.querySelector('.ua-tooltip');
+  var hoverLine = svg.querySelector('.ua-hover-line');
+  var hoverDots = svg.querySelectorAll('.ua-hover-dot');
+  var labelEl  = tooltip.querySelector('.ua-tooltip-label');
+  var rowsEl   = tooltip.querySelector('.ua-tooltip-rows');
   var vbW = parseFloat(svg.getAttribute('data-vb-width'));
+  var vbH = parseFloat(svg.getAttribute('data-vb-height'));
 
-  var points;
-  try { points = JSON.parse(svg.getAttribute('data-points') || '[]'); }
-  catch (e) { points = []; }
-  if (!points.length) return;
+  var series, labels;
+  try { series = JSON.parse(svg.getAttribute('data-series') || '[]'); }
+  catch (e) { series = []; }
+  try { labels = JSON.parse(svg.getAttribute('data-labels') || '[]'); }
+  catch (e) { labels = []; }
+  if (!series.length || !labels.length) return;
+
+  // All series share the bucket grid → x positions are identical. Grab
+  // the column centers from the first series and we're done.
+  var columns = series[0].points.map(function (p) { return p.x; });
+
+  // Quick map from series key to its hover dot in the SVG.
+  var dotByKey = {};
+  hoverDots.forEach(function (d) { dotByKey[d.getAttribute('data-series')] = d; });
 
   function onMove(e) {
     var svgRect  = svg.getBoundingClientRect();
     var wrapRect = wrap.getBoundingClientRect();
-    // Convert pixel X to viewBox X via the rendered-to-viewBox scale.
     var xVb = (e.clientX - svgRect.left) / svgRect.width * vbW;
 
-    // Nearest point by absolute X distance — cheaper than binary search
-    // and plenty fast for <= ~200 buckets.
-    var nearest = points[0], minD = Infinity;
-    for (var i = 0; i < points.length; i++) {
-      var d = Math.abs(points[i].x - xVb);
-      if (d < minD) { minD = d; nearest = points[i]; }
+    // Nearest column by absolute X distance.
+    var idx = 0, minD = Infinity;
+    for (var i = 0; i < columns.length; i++) {
+      var d = Math.abs(columns[i] - xVb);
+      if (d < minD) { minD = d; idx = i; }
     }
 
-    marker.setAttribute('cx', nearest.x);
-    marker.setAttribute('cy', nearest.y);
-    marker.setAttribute('opacity', '1');
+    var colX = columns[idx];
 
+    // Vertical hover line
+    hoverLine.setAttribute('x1', colX);
+    hoverLine.setAttribute('x2', colX);
+    hoverLine.setAttribute('opacity', '0.55');
+
+    // Per-series highlight dots
+    var rowsHtml = '';
+    var total = 0;
+    for (var s = 0; s < series.length; s++) {
+      var sPoint = series[s].points[idx];
+      var dot = dotByKey[series[s].key];
+      if (dot) {
+        dot.setAttribute('cx', sPoint.x);
+        dot.setAttribute('cy', sPoint.y);
+        dot.setAttribute('opacity', '1');
+      }
+      total += sPoint.count;
+      rowsHtml += '<div style="display:flex;align-items:center;gap:6px;line-height:1.35;">'
+        + '<span style="width:8px;height:8px;border-radius:50%;background:' + series[s].color + ';display:inline-block;"></span>'
+        + '<code style="font-size:0.72rem;color:#fff;opacity:0.95;">' + series[s].key + '</code>'
+        + '<span style="margin-left:auto;font-variant-numeric:tabular-nums;font-weight:600;">' + sPoint.count + '</span>'
+        + '</div>';
+    }
+    // Total row (only if > 1 series)
+    if (series.length > 1) {
+      rowsHtml += '<div style="display:flex;align-items:center;gap:6px;margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.18);line-height:1.35;">'
+        + '<span style="opacity:0.7;">Σ</span>'
+        + '<span style="margin-left:auto;font-variant-numeric:tabular-nums;font-weight:600;">' + total + '</span>'
+        + '</div>';
+    }
+
+    // Position tooltip above the column center.
     var ratioX = svgRect.width  / vbW;
-    var ratioY = svgRect.height / parseFloat(svg.getAttribute('data-vb-height'));
-    tooltip.style.left = (nearest.x * ratioX + (svgRect.left - wrapRect.left)) + 'px';
-    tooltip.style.top  = (nearest.y * ratioY + (svgRect.top  - wrapRect.top))  + 'px';
+    var ratioY = svgRect.height / vbH;
+    // Anchor the tooltip to the top-most series dot so it's close to
+    // the highest value at this x (easier to read than a fixed offset).
+    var topY = Infinity;
+    for (var k = 0; k < series.length; k++) {
+      if (series[k].points[idx].y < topY) topY = series[k].points[idx].y;
+    }
+    tooltip.style.left = (colX * ratioX + (svgRect.left - wrapRect.left)) + 'px';
+    tooltip.style.top  = (topY * ratioY + (svgRect.top  - wrapRect.top))  + 'px';
     tooltip.style.display = 'block';
-    labelEl.textContent = nearest.label;
-    countEl.textContent = nearest.count + ' ' + (nearest.count === 1
-      ? {{ 'event'|t('user-audit')|json_encode|raw }}
-      : {{ 'events'|t('user-audit')|json_encode|raw }});
+    labelEl.textContent = labels[idx];
+    rowsEl.innerHTML = rowsHtml;
   }
   function onLeave() {
-    marker.setAttribute('opacity', '0');
+    hoverLine.setAttribute('opacity', '0');
+    hoverDots.forEach(function (d) { d.setAttribute('opacity', '0'); });
     tooltip.style.display = 'none';
   }
 
