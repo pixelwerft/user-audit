@@ -147,3 +147,104 @@
   type: 'number',
   value: settings.newLocationLookbackDays,
 }) }}
+
+<hr>
+
+{# Defaults payload is rendered into a data attribute (rather than a
+   global JS var) so the JS stays scoped to this button and the page
+   doesn't leak plugin-specific state into the CP namespace. #}
+{% set defaultsPayload = {
+  retentionDays: defaults.retentionDays,
+  recordCpEvents: defaults.recordCpEvents,
+  recordFrontendEvents: defaults.recordFrontendEvents,
+  recordClientType: defaults.recordClientType,
+  throttlingEnabled: defaults.throttlingEnabled,
+  failsPerIp: defaults.failsPerIp,
+  failsPerEmail: defaults.failsPerEmail,
+  windowMinutes: defaults.windowMinutes,
+  newLocationAlertsEnabled: defaults.newLocationAlertsEnabled,
+  newLocationLookbackDays: defaults.newLocationLookbackDays,
+  allowedUserGroupUids: defaults.allowedUserGroupUids,
+} %}
+
+<div style="margin-top: 1rem;">
+  <button
+    type="button"
+    id="user-audit-reset-defaults"
+    class="btn"
+    data-defaults="{{ defaultsPayload|json_encode }}"
+    data-confirm="{{ 'Reset all fields to defaults? Your changes will only be saved once you click Save.'|t('user-audit') }}"
+  >
+    {{ 'Reset to defaults'|t('user-audit') }}
+  </button>
+  <p class="light" style="margin-top: 0.5rem; font-size: 0.8rem; max-width: 48em;">
+    {{ 'Fills every field on this page with its built-in default value. Nothing is written to disk — click Save afterwards to persist the reset.'|t('user-audit') }}
+  </p>
+</div>
+
+{% js %}
+(function () {
+  var btn = document.getElementById('user-audit-reset-defaults');
+  if (!btn) return;
+
+  var defaults;
+  try { defaults = JSON.parse(btn.getAttribute('data-defaults') || '{}'); }
+  catch (e) { defaults = {}; }
+
+  // The settings template is rendered inside Craft's {% namespace 'settings' %}
+  // block, so every input ends up as settings[fieldName]. Scope our
+  // lookups to that prefix to avoid collisions with unrelated CP fields.
+  function findInput(name) {
+    return document.querySelector('[name="settings[' + name + ']"]');
+  }
+  function findAllInputs(name) {
+    return document.querySelectorAll(
+      '[name="settings[' + name + ']"], [name="settings[' + name + '][]"]'
+    );
+  }
+
+  function setText(name, value) {
+    var el = findInput(name);
+    if (el) el.value = value;
+  }
+
+  function setLightswitch(name, on) {
+    // Craft lightswitch markup: .lightswitch container with an inner
+    // hidden input. Toggling the .on class on the container animates
+    // the handle; setting the hidden value persists on submit.
+    var hidden = document.querySelector('input[type="hidden"][name="settings[' + name + ']"]');
+    if (!hidden) return;
+    hidden.value = on ? '1' : '';
+    var container = hidden.closest('.lightswitch');
+    if (container) container.classList.toggle('on', !!on);
+  }
+
+  function setCheckboxGroup(name, values) {
+    var arr = Array.isArray(values) ? values : [];
+    findAllInputs(name).forEach(function (input) {
+      if (input.type === 'checkbox') {
+        input.checked = arr.indexOf(input.value) !== -1;
+      }
+    });
+  }
+
+  btn.addEventListener('click', function () {
+    var msg = btn.getAttribute('data-confirm');
+    if (msg && !window.confirm(msg)) return;
+
+    setText('retentionDays', defaults.retentionDays);
+    setText('failsPerIp', defaults.failsPerIp);
+    setText('failsPerEmail', defaults.failsPerEmail);
+    setText('windowMinutes', defaults.windowMinutes);
+    setText('newLocationLookbackDays', defaults.newLocationLookbackDays);
+
+    setLightswitch('recordCpEvents', !!defaults.recordCpEvents);
+    setLightswitch('recordFrontendEvents', !!defaults.recordFrontendEvents);
+    setLightswitch('recordClientType', !!defaults.recordClientType);
+    setLightswitch('throttlingEnabled', !!defaults.throttlingEnabled);
+    setLightswitch('newLocationAlertsEnabled', !!defaults.newLocationAlertsEnabled);
+
+    setCheckboxGroup('allowedUserGroupUids', defaults.allowedUserGroupUids || []);
+  });
+})();
+{% endjs %}

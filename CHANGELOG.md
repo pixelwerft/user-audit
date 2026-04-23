@@ -3,6 +3,14 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.4.1 - 2026-04-23
+
+### Added
+- *Reset to defaults* button at the bottom of the settings page. Refills
+  every form field with its class-declared default without touching
+  saved state — the reset is only persisted when the operator clicks
+  Save afterwards, so it doubles as a safe preview of the defaults.
+
 ## 1.4.0 - 2026-04-23
 
 ### Added

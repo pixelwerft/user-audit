@@ -1,6 +1,11 @@
 <?php
 
 return [
+    // Settings: reset defaults
+    'Reset to defaults' => 'Standard-Einstellungen setzen',
+    'Fills every field on this page with its built-in default value. Nothing is written to disk — click Save afterwards to persist the reset.' => 'Befüllt alle Felder auf dieser Seite mit ihren Standardwerten. Es wird noch nichts gespeichert — klicke danach auf Speichern, um die Rücksetzung zu übernehmen.',
+    'Reset all fields to defaults? Your changes will only be saved once you click Save.' => 'Alle Felder auf Standardwerte zurücksetzen? Die Änderungen werden erst mit einem Klick auf Speichern übernommen.',
+
     // Settings: access
     'Access' => 'Zugriff',
     'Admins always have access to the User Audit viewer. Additionally grant access to selected CP user groups below. If no group is selected the plugin stays admin-only.' => 'Admins haben immer Zugriff auf den User-Audit-Viewer. Zusätzlich können ausgewählte CP-Benutzergruppen unten freigeschaltet werden. Ist keine Gruppe ausgewählt, bleibt das Plugin Admin-only.',

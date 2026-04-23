@@ -119,7 +119,13 @@ class UserAudit extends Plugin
     {
         return Craft::$app->getView()->renderTemplate(
             'user-audit/settings',
-            ['settings' => $this->getSettings()]
+            [
+                'settings' => $this->getSettings(),
+                // Fresh Settings instance so the template can surface
+                // the class-declared defaults to the "Reset to defaults"
+                // button without having to duplicate them in Twig.
+                'defaults' => new Settings(),
+            ]
         );
     }
 
