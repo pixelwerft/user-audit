@@ -3,7 +3,7 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## 1.6.1 - 2026-04-23
+## 1.2.0 - 2026-04-23
 
 ### Fixed
 - Monitor chart stayed blank when every row in the audit log had
@@ -36,7 +36,7 @@ is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   strings added. Current state: 96 keys in code = 96 keys in
   `de/user-audit.php`, no missing, no orphans.
 
-## 1.6.0 - 2026-04-23
+## 1.1.6 - 2026-04-23
 
 ### Added
 - Monitor chart is now multi-series: one colored line per event type
@@ -61,7 +61,7 @@ is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   made Craft's prefix-match consider /monitor an unrelated top-level
   URL. Restored to the plugin root.
 
-## 1.5.0 - 2026-04-23
+## 1.1.5 - 2026-04-23
 
 ### Added
 - Monitor: time-range options now include *This month*, *Last 30 days*
@@ -89,7 +89,7 @@ is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   a sudden drop to zero triggered a Catmull-Rom overshoot. Control
   points are now clamped inside the plot area.
 
-## 1.4.1 - 2026-04-23
+## 1.1.4 - 2026-04-23
 
 ### Added
 - *Reset to defaults* button at the bottom of the settings page. Refills
@@ -97,7 +97,7 @@ is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   saved state — the reset is only persisted when the operator clicks
   Save afterwards, so it doubles as a safe preview of the defaults.
 
-## 1.4.0 - 2026-04-23
+## 1.1.3 - 2026-04-23
 
 ### Added
 - Subnav under the *User Audit* control-panel item:
@@ -118,7 +118,7 @@ is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The standalone *Active Sessions* page — its role is absorbed by the
   Monitor dashboard.
 
-## 1.3.0 - 2026-04-23
+## 1.1.2 - 2026-04-23
 
 ### Changed
 - **Breaking:** Viewer access is now admin-only by default. The previous
@@ -133,7 +133,7 @@ is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   *Settings → Plugins → User Audit* and whitelists the relevant CP user
   group(s). Admins are unaffected.
 
-## 1.2.0 - 2026-04-22
+## 1.1.1 - 2026-04-22
 
 ### Added
 - `client` column on `{{%user_activity_log}}`: stores `pwa` or `browser`
