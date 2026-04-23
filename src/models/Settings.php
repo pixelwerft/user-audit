@@ -45,6 +45,14 @@ class Settings extends Model
     public bool $newLocationAlertsEnabled = false;
     public int $newLocationLookbackDays = 90;
 
+    // Access control: admins can always see the plugin. In addition,
+    // selected CP user groups can be granted access via this list of
+    // group UIDs. Empty array → admin-only (default). Group UIDs (not
+    // IDs) are used so the setting survives project-config deploys
+    // across environments.
+    /** @var string[] */
+    public array $allowedUserGroupUids = [];
+
     public function defineRules(): array
     {
         return [
@@ -62,6 +70,7 @@ class Settings extends Model
                 'recordFrontendEvents',
                 'recordClientType',
             ], 'boolean'],
+            [['allowedUserGroupUids'], 'each', 'rule' => ['string']],
         ];
     }
 }

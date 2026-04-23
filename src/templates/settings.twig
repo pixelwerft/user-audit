@@ -1,5 +1,30 @@
 {% import '_includes/forms' as forms %}
 
+{% set groupOptions = [] %}
+{% for group in craft.app.userGroups.getAllGroups() %}
+  {% set groupOptions = groupOptions|merge([{
+    label: group.name,
+    value: group.uid,
+  }]) %}
+{% endfor %}
+
+<h2>{{ 'Access'|t('user-audit') }}</h2>
+<p class="light">
+  {{ 'Admins always have access to the User Audit viewer. Additionally grant access to selected CP user groups below. If no group is selected the plugin stays admin-only.'|t('user-audit') }}
+</p>
+
+{{ forms.checkboxSelectField({
+  label: 'Allowed user groups'|t('user-audit'),
+  instructions: 'Members of these groups can see the User Audit nav entry and the viewer. Admins always have access regardless of this setting.'|t('user-audit'),
+  id: 'allowedUserGroupUids',
+  name: 'allowedUserGroupUids',
+  options: groupOptions,
+  values: settings.allowedUserGroupUids,
+  showAllOption: false,
+}) }}
+
+<hr>
+
 <h2>{{ 'What gets recorded'|t('user-audit') }}</h2>
 <p class="light">
   {{ 'Controls which events are written to the activity log. Changes take effect immediately — existing entries are kept. Custom events from other modules (log() with a custom eventType) are not affected.'|t('user-audit') }}

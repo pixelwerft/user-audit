@@ -1,6 +1,13 @@
 <?php
 
 return [
+    // Settings: access
+    'Access' => 'Zugriff',
+    'Admins always have access to the User Audit viewer. Additionally grant access to selected CP user groups below. If no group is selected the plugin stays admin-only.' => 'Admins haben immer Zugriff auf den User-Audit-Viewer. Zusätzlich können ausgewählte CP-Benutzergruppen unten freigeschaltet werden. Ist keine Gruppe ausgewählt, bleibt das Plugin Admin-only.',
+    'Allowed user groups' => 'Freigeschaltete Benutzergruppen',
+    'Members of these groups can see the User Audit nav entry and the viewer. Admins always have access regardless of this setting.' => 'Mitglieder dieser Gruppen sehen den User-Audit-Nav-Eintrag und den Viewer. Admins haben unabhängig von dieser Einstellung immer Zugriff.',
+    'You are not permitted to view the User Audit.' => 'Du hast keine Berechtigung, den User Audit zu sehen.',
+
     // Settings: recording
     'What gets recorded' => 'Was wird aufgezeichnet',
     'Controls which events are written to the activity log. Changes take effect immediately — existing entries are kept. Custom events from other modules (log() with a custom eventType) are not affected.' => 'Steuert, welche Events ins Aktivitätslog geschrieben werden. Änderungen wirken ab sofort — vorhandene Einträge bleiben. Custom-Events anderer Module (log() mit eigenem eventType) sind davon nicht betroffen.',

@@ -53,8 +53,9 @@ composer require pixelwerft/user-audit
 ./craft plugin/install user-audit
 ```
 
-Grant the **View activity log** permission in *Users → Permissions* to any
-admin user who should see the CP viewer.
+By default the viewer is **admin-only**. To additionally grant access to
+other control-panel users, open *Settings → Plugins → User Audit* and add
+the desired user groups under **Access → Allowed user groups**.
 
 ## Settings
 
@@ -62,6 +63,7 @@ Available under *Settings → Plugins → User Audit*:
 
 | Setting | Default | Effect |
 | --- | --- | --- |
+| Allowed user groups | (none) | CP user groups that may see the viewer. Admins always have access. |
 | Record control panel events | on | Log `/admin` logins |
 | Record frontend events | on | Log PWA/public-site logins |
 | Record client type | on | Read `X-Reest-Client` header, store `pwa`/`browser` |

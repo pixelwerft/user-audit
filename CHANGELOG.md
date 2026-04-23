@@ -3,6 +3,21 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.3.0 - 2026-04-23
+
+### Changed
+- **Breaking:** Viewer access is now admin-only by default. The previous
+  `user-audit-view` permission has been removed. Any CP user who should
+  keep access must either be an admin or be a member of a group listed
+  under the new *Access → Allowed user groups* setting.
+- Settings page: new *Access* section at the top with a user-group picker
+  (stores group UIDs, safe to deploy via project config).
+
+### Migration
+- On upgrade, non-admin users lose access until the deploying admin opens
+  *Settings → Plugins → User Audit* and whitelists the relevant CP user
+  group(s). Admins are unaffected.
+
 ## 1.2.0 - 2026-04-22
 
 ### Added

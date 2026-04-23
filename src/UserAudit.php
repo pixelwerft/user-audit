@@ -5,13 +5,12 @@ namespace pixelwerft\useraudit;
 use Craft;
 use craft\base\Model;
 use craft\base\Plugin;
+use craft\elements\User as UserElement;
 use craft\events\LoginFailureEvent;
 use craft\events\RegisterComponentTypesEvent;
 use craft\events\RegisterCpNavItemsEvent;
 use craft\events\RegisterUrlRulesEvent;
-use craft\events\RegisterUserPermissionsEvent;
 use craft\services\Dashboard;
-use craft\services\UserPermissions;
 use craft\web\User as WebUser;
 use craft\web\UrlManager;
 use craft\web\twig\variables\Cp;
@@ -71,8 +70,44 @@ class UserAudit extends Plugin
         $this->registerThrottling();
         $this->registerCpRoutes();
         $this->registerCpNav();
-        $this->registerPermissions();
         $this->registerDashboardWidgets();
+    }
+
+    /**
+     * Access gate for the audit viewer UI (CP nav and controller).
+     *
+     * Admins always have access. In addition, users in any group whose
+     * UID is listed in `allowedUserGroupUids` may access the viewer.
+     * Everyone else is denied — the plugin is admin-only out of the box.
+     */
+    public function canAccess(?UserElement $user): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+        if ($user->admin) {
+            return true;
+        }
+
+        /** @var Settings $settings */
+        $settings = $this->getSettings();
+        if (empty($settings->allowedUserGroupUids)) {
+            return false;
+        }
+
+        try {
+            foreach ($user->getGroups() as $group) {
+                if (in_array((string)$group->uid, $settings->allowedUserGroupUids, true)) {
+                    return true;
+                }
+            }
+        } catch (\Throwable) {
+            // Group lookup failure must not escalate into a 500 on a
+            // nav render — deny access and move on.
+            return false;
+        }
+
+        return false;
     }
 
     protected function createSettingsModel(): ?Model
@@ -277,8 +312,7 @@ class UserAudit extends Plugin
             Cp::class,
             Cp::EVENT_REGISTER_CP_NAV_ITEMS,
             function (RegisterCpNavItemsEvent $event) {
-                $user = Craft::$app->getUser()->getIdentity();
-                if (!$user || !$user->can('user-audit-view')) {
+                if (!$this->canAccess(Craft::$app->getUser()->getIdentity())) {
                     return;
                 }
 
@@ -286,24 +320,6 @@ class UserAudit extends Plugin
                     'label' => Craft::t('user-audit', 'User Audit'),
                     'url' => 'user-audit',
                     'icon' => '@pixelwerft/useraudit/icon-mask.svg',
-                ];
-            }
-        );
-    }
-
-    private function registerPermissions(): void
-    {
-        Event::on(
-            UserPermissions::class,
-            UserPermissions::EVENT_REGISTER_PERMISSIONS,
-            function (RegisterUserPermissionsEvent $event) {
-                $event->permissions[] = [
-                    'heading' => Craft::t('user-audit', 'User Audit'),
-                    'permissions' => [
-                        'user-audit-view' => [
-                            'label' => Craft::t('user-audit', 'View activity log'),
-                        ],
-                    ],
                 ];
             }
         );

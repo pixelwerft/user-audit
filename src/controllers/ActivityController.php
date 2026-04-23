@@ -7,20 +7,24 @@ use craft\web\Controller;
 use pixelwerft\useraudit\records\UserActivityLog;
 use pixelwerft\useraudit\services\ActivityLogService;
 use pixelwerft\useraudit\UserAudit;
+use yii\web\ForbiddenHttpException;
 use yii\web\Response;
 
 /**
  * CP controller for the audit viewer UI.
  *
- * All actions require user-audit-view. The plugin owner can grant
- * the permission per admin user via Craft's permissions.
+ * Admin actions (index/active/export) are admin-only by default.
+ * CP user groups listed under the plugin's `allowedUserGroupUids`
+ * setting are granted the same access. The user-facing endpoints
+ * (session-expired, my-recent) are intentionally open to the user
+ * themselves.
  */
 class ActivityController extends Controller
 {
     // session-expired: anonymous (the PWA can no longer be
     // authenticated when its session expires). my-recent: logged-in
-    // user, no user-audit-view permission required (users may view
-    // their own activity). Everything else: user-audit-view required.
+    // user viewing their own history (no viewer access required).
+    // Everything else: admin or whitelisted CP group.
     protected array|int|bool $allowAnonymous = ['session-expired'];
 
     public $enableCsrfValidation = true;
@@ -40,12 +44,16 @@ class ActivityController extends Controller
             return false;
         }
 
-        // Permission gate only for the admin actions (index, export).
-        // session-expired and my-recent are user endpoints:
+        // Viewer gate only for the admin-facing actions.
         //   - session-expired: anonymous (user just logged out)
         //   - my-recent: logged-in user views their own history
         if (!in_array($action->id, ['session-expired', 'my-recent'], true)) {
-            $this->requirePermission('user-audit-view');
+            $user = Craft::$app->getUser()->getIdentity();
+            if (!UserAudit::getInstance()->canAccess($user)) {
+                throw new ForbiddenHttpException(
+                    Craft::t('user-audit', 'You are not permitted to view the User Audit.')
+                );
+            }
         }
 
         if ($action->id === 'my-recent') {
