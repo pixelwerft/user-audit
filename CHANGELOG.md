@@ -3,6 +3,39 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.6.1 - 2026-04-23
+
+### Fixed
+- Monitor chart stayed blank when every row in the audit log had
+  `client = NULL` (the common case on fresh installs where all
+  activity is CP logins — CP requests don't carry a client type).
+  The default query always appended `WHERE context IN (…) AND
+  client IN (…)` which silently excluded NULL columns. Now
+  "all options selected" is treated as "no filter on this
+  dimension" and NULL-column rows are included; partial
+  selections still exclude NULLs as operators expect.
+- Stat cards on top of the Monitor page use the same rule so the
+  header numbers match what's in the chart.
+
+### Changed
+- Page titles renamed:
+  - *Logs* → *User audit logs* (DE: "User Audit Logs")
+  - *Monitor* → *User audit monitor* (DE: "User Audit Monitor")
+  The subnav items in the CP sidebar keep their short labels
+  (*Logs*, *Monitor*) so the navigation stays compact.
+- Monitor chart series regain per-line area fills at
+  `fill-opacity: 0.08`. Up to five overlapping series stack
+  additively without turning muddy, and on sparse data the
+  faint tint surfaces which series has activity before the
+  stroke alone would show it.
+- All/None toggle in the filter dropdowns uses a slash separator
+  (`All / None`) instead of a middle dot — reads more clearly as
+  two opposite actions.
+- German translations consolidated: dead strings from the
+  removed *Active Sessions* page pruned, new filter/monitor
+  strings added. Current state: 96 keys in code = 96 keys in
+  `de/user-audit.php`, no missing, no orphans.
+
 ## 1.6.0 - 2026-04-23
 
 ### Added
