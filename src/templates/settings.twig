@@ -191,8 +191,8 @@
   try { defaults = JSON.parse(btn.getAttribute('data-defaults') || '{}'); }
   catch (e) { defaults = {}; }
 
-  // The settings template is rendered inside Craft's {% namespace 'settings' %}
-  // block, so every input ends up as settings[fieldName]. Scope our
+  // Craft wraps settingsHtml in a `namespace` block named "settings",
+  // so every input ends up as settings[fieldName]. We scope our
   // lookups to that prefix to avoid collisions with unrelated CP fields.
   function findInput(name) {
     return document.querySelector('[name="settings[' + name + ']"]');
