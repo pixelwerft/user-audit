@@ -193,16 +193,41 @@
 
 {% css %}
 /* Horizontal scroll wrapper for the logs table. Without this the wide
-   table pushes the whole CP content area wider than the viewport on
-   narrow windows instead of scrolling inside its own bounds. */
+   table pushes the CP content area wider than the viewport on narrow
+   windows instead of scrolling inside its own bounds.
+
+   min-width: 0 is the critical bit — Craft's CP content area is a
+   flex parent, and flex children default to min-width: auto which
+   refuses to shrink below their content's intrinsic size. Without it
+   the wrapper simply grows to whatever width the table wants, and
+   overflow-x: auto never kicks in because nothing is actually
+   overflowing yet. */
 .ua-table-scroll {
+  display: block;
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+}
+/* Belt and suspenders: if the surrounding layout is a flex/grid
+   container that references this element directly, flex: 1 1 0
+   gives the scroll wrapper an explicit basis of 0 so it cannot
+   inflate under its content. */
+.content-pane > .ua-table-scroll,
+#main-content .ua-table-scroll {
+  flex: 1 1 0;
+}
+/* Craft's .tableview sometimes clips with its own overflow — make
+   sure it doesn't second-guess our scroll container. */
+.ua-table-scroll .tableview {
+  overflow: visible;
+  max-width: none;
 }
 /* Force the table to honor its column content width so scrolling
    actually kicks in — Craft's .data.fullwidth is width:100% which
    would otherwise squish columns instead of overflowing. */
+.ua-table-scroll table.data,
 .ua-table-scroll table.data.fullwidth {
   width: auto;
   min-width: 100%;

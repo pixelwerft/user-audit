@@ -3,16 +3,6 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## 1.2.2 - 2026-04-24
-
-### Fixed
-- Logs table overflowed horizontally and pushed the whole CP content
-  area wider than the viewport on narrow windows. The table is now
-  wrapped in a `.ua-table-scroll` container with `overflow-x: auto`,
-  and the `.data.fullwidth` rule is relaxed inside that wrapper so
-  the table honors its natural column widths and scrolls inside its
-  own bounds instead of distending the page.
-
 ## 1.2.1 - 2026-04-23
 
 ### Fixed
