@@ -111,17 +111,18 @@
 
 {% set sortBaseQuery = { q: q, event: eventType, context: context, client: client } %}
 
-<div class="tableview">
-  <table class="data fullwidth">
-    <thead>
-      <tr>
-        {% for col, label in sortableColumns %}
-          <th style="white-space: nowrap; cursor: pointer;">
-            {{ _self.sortHeader(col, label, sort, dir, sortBaseQuery) }}
-          </th>
-        {% endfor %}
-      </tr>
-    </thead>
+<div class="ua-table-scroll">
+  <div class="tableview">
+    <table class="data fullwidth">
+      <thead>
+        <tr>
+          {% for col, label in sortableColumns %}
+            <th style="white-space: nowrap; cursor: pointer;">
+              {{ _self.sortHeader(col, label, sort, dir, sortBaseQuery) }}
+            </th>
+          {% endfor %}
+        </tr>
+      </thead>
     <tbody>
       {% for row in rows %}
         <tr>
@@ -169,8 +170,9 @@
           </td>
         </tr>
       {% endfor %}
-    </tbody>
-  </table>
+      </tbody>
+    </table>
+  </div>
 </div>
 
 {% if pageCount > 1 %}
@@ -188,6 +190,24 @@
     {% endif %}
   </nav>
 {% endif %}
+
+{% css %}
+/* Horizontal scroll wrapper for the logs table. Without this the wide
+   table pushes the whole CP content area wider than the viewport on
+   narrow windows instead of scrolling inside its own bounds. */
+.ua-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+/* Force the table to honor its column content width so scrolling
+   actually kicks in — Craft's .data.fullwidth is width:100% which
+   would otherwise squish columns instead of overflowing. */
+.ua-table-scroll table.data.fullwidth {
+  width: auto;
+  min-width: 100%;
+}
+{% endcss %}
 
 {% js %}
 (function () {
