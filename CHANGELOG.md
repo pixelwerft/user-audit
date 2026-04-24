@@ -3,6 +3,23 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.2.2 - 2026-04-24
+
+### Fixed
+- Logs table distended the whole CP content area wider than the
+  viewport on narrow windows instead of scrolling inside its own
+  bounds. The table is now wrapped in a `.ua-table-scroll` element
+  with `display: block`, `width: 100%`, `min-width: 0` and
+  `overflow-x: auto`. The `min-width: 0` override is the critical
+  piece — Craft's content pane is a flex container, and flex
+  children default to `min-width: auto` which refuses to shrink
+  below their intrinsic content width. Without that override the
+  wrapper kept growing with the table and `overflow-x: auto` never
+  triggered. Inner `.tableview` overflow is neutralized inside the
+  wrapper, and `.data` / `.data.fullwidth` are set to `width: auto;
+  min-width: 100%` so the table keeps its natural column widths
+  and scrolls horizontally inside its own frame.
+
 ## 1.2.1 - 2026-04-23
 
 ### Fixed
