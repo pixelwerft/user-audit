@@ -426,6 +426,175 @@ class ActivityController extends Controller
     }
 
     /**
+     * User trace: full activity log + headline stats + week×hour
+     * heatmap for a single user. Reachable from the "Benutzer" column
+     * link on the Logs page.
+     *
+     * userId comes via the URL rule (\d+) so it's always positive.
+     * If the audit table has zero rows for that user we 404 — there's
+     * nothing to show. The Craft user record may be missing (FK is
+     * SET NULL for deleted users); in that case we fall back to the
+     * email/groups stored on the latest audit row, which doubles as
+     * a compliance feature: deleted users remain inspectable.
+     */
+    public function actionUser(int $userId): Response
+    {
+        if ($userId <= 0) {
+            throw new \yii\web\NotFoundHttpException();
+        }
+
+        // Fetch latest audit row to ensure the user has any activity
+        // and to source fallback identity (email/groups) when the
+        // craft user has been deleted.
+        $latestRow = UserActivityLog::find()
+            ->where(['userId' => $userId])
+            ->orderBy(['dateCreated' => SORT_DESC])
+            ->one();
+
+        if (!$latestRow) {
+            throw new \yii\web\NotFoundHttpException(
+                Craft::t('user-audit', 'No activity recorded for this user.')
+            );
+        }
+
+        $craftUser = Craft::$app->getUsers()->getUserById($userId);
+
+        // ---- Log table (sortable, paginated) -------------------------
+        $request = Craft::$app->getRequest();
+        $page = max(1, (int)$request->getQueryParam('page', 1));
+        $perPage = 50;
+        $sort = (string)$request->getQueryParam('sort', 'dateCreated');
+        $dir = strtolower((string)$request->getQueryParam('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        if (!in_array($sort, self::SORTABLE_COLUMNS, true)) {
+            $sort = 'dateCreated';
+        }
+        $sortDir = $dir === 'asc' ? SORT_ASC : SORT_DESC;
+        $orderBy = $sort === 'dateCreated'
+            ? ['dateCreated' => $sortDir]
+            : [$sort => $sortDir, 'dateCreated' => SORT_DESC];
+
+        $logQuery = UserActivityLog::find()
+            ->where(['userId' => $userId])
+            ->orderBy($orderBy);
+
+        $total = (int)$logQuery->count();
+        $rows = $logQuery
+            ->offset(($page - 1) * $perPage)
+            ->limit($perPage)
+            ->all();
+
+        // ---- Headline stats ------------------------------------------
+        $db = Craft::$app->getDb();
+        $countByEventInWindow = static function (string $eventType, ?int $windowHours)
+        use ($db, $userId): int {
+            $sql = 'SELECT COUNT(*) FROM {{%user_activity_log}}
+                    WHERE [[userId]] = :u AND [[eventType]] = :t';
+            $params = [':u' => $userId, ':t' => $eventType];
+            if ($windowHours !== null) {
+                $sql .= ' AND [[dateCreated]] >= :since';
+                $params[':since'] = (new \DateTime("-{$windowHours} hours"))->format('Y-m-d H:i:s');
+            }
+            return (int)$db->createCommand($sql, $params)->queryScalar();
+        };
+
+        $stats = [
+            'total' => $total,
+            'logins24h' => $countByEventInWindow(ActivityLogService::EVENT_LOGIN, 24),
+            'logins7d' => $countByEventInWindow(ActivityLogService::EVENT_LOGIN, 24 * 7),
+            'failed24h' => $countByEventInWindow(ActivityLogService::EVENT_LOGIN_FAILED, 24),
+            'failedTotal' => $countByEventInWindow(ActivityLogService::EVENT_LOGIN_FAILED, null),
+            'blockedTotal' => $countByEventInWindow(ActivityLogService::EVENT_LOGIN_BLOCKED, null),
+        ];
+
+        $lastLogin = UserActivityLog::find()
+            ->where(['userId' => $userId, 'eventType' => ActivityLogService::EVENT_LOGIN])
+            ->orderBy(['dateCreated' => SORT_DESC])
+            ->one();
+
+        $lastFailed = UserActivityLog::find()
+            ->where(['userId' => $userId, 'eventType' => ActivityLogService::EVENT_LOGIN_FAILED])
+            ->orderBy(['dateCreated' => SORT_DESC])
+            ->one();
+
+        // ---- Top-N aggregates over the last 90 days -----------------
+        $cutoff90 = (new \DateTime('-90 days'))->format('Y-m-d H:i:s');
+        $topField = static function (string $col) use ($db, $userId, $cutoff90): array {
+            $rows = $db->createCommand(
+                "SELECT [[$col]] AS v, COUNT(*) AS c
+                 FROM {{%user_activity_log}}
+                 WHERE [[userId]] = :u AND [[$col]] IS NOT NULL
+                   AND [[dateCreated]] >= :since
+                 GROUP BY [[$col]]
+                 ORDER BY c DESC
+                 LIMIT 5",
+                [':u' => $userId, ':since' => $cutoff90]
+            )->queryAll();
+            return array_map(fn($r) => ['value' => $r['v'], 'count' => (int)$r['c']], $rows);
+        };
+
+        $topIps = $topField('ipAddress');
+        $topDevices = $topField('deviceType');
+        $topBrowsers = $topField('browserName');
+
+        // ---- Heatmap: 7 (Mon-Sun) × 24 (hours) over 90 days ----------
+        // Aggregated in PHP from raw timestamps so the date math stays
+        // portable across MySQL/MariaDB/Postgres. Only login events
+        // count — failed/blocked/logout would distort the "when does
+        // this user actually use the system?" picture the heatmap is
+        // meant to answer.
+        $heatmap = [];
+        for ($d = 1; $d <= 7; $d++) {
+            for ($h = 0; $h <= 23; $h++) {
+                $heatmap[$d][$h] = 0;
+            }
+        }
+        $heatmapMax = 0;
+        $heatmapTotal = 0;
+
+        $loginRows = (new \yii\db\Query())
+            ->select(['dateCreated'])
+            ->from('{{%user_activity_log}}')
+            ->where(['userId' => $userId, 'eventType' => ActivityLogService::EVENT_LOGIN])
+            ->andWhere(['>=', 'dateCreated', $cutoff90])
+            ->all();
+
+        foreach ($loginRows as $r) {
+            $dt = new \DateTime($r['dateCreated']);
+            $dow = (int)$dt->format('N'); // ISO weekday: 1 (Mon) - 7 (Sun)
+            $hour = (int)$dt->format('G'); // 0-23
+            $heatmap[$dow][$hour]++;
+            $heatmapTotal++;
+            if ($heatmap[$dow][$hour] > $heatmapMax) {
+                $heatmapMax = $heatmap[$dow][$hour];
+            }
+        }
+
+        return $this->renderTemplate('user-audit/user', [
+            'targetUserId' => $userId,
+            'targetUser' => $craftUser,
+            'fallbackEmail' => $latestRow->email,
+            'fallbackGroups' => $latestRow->userGroups,
+            'rows' => $rows,
+            'total' => $total,
+            'page' => $page,
+            'perPage' => $perPage,
+            'pageCount' => max(1, (int)ceil($total / $perPage)),
+            'sort' => $sort,
+            'dir' => $dir,
+            'stats' => $stats,
+            'lastLogin' => $lastLogin,
+            'lastFailed' => $lastFailed,
+            'topIps' => $topIps,
+            'topDevices' => $topDevices,
+            'topBrowsers' => $topBrowsers,
+            'heatmap' => $heatmap,
+            'heatmapMax' => $heatmapMax,
+            'heatmapTotal' => $heatmapTotal,
+        ]);
+    }
+
+    /**
      * Builds a smooth SVG path through the given XY points using a
      * Catmull-Rom → cubic-Bezier conversion with moderate tension.
      * Returns [linePath, areaPath] — the area path closes down to

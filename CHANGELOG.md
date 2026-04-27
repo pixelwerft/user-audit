@@ -3,6 +3,31 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.3.0 - 2026-04-24
+
+### Added
+- User trace page at `/admin/user-audit/user/<userId>` — drill into
+  the full activity log of a single user. Reachable by clicking the
+  user-id in the *User* column of the Logs list.
+- Identity card surfacing user name, email, group memberships and
+  account state (active / suspended / locked). Deleted Craft users
+  remain inspectable via the email + groups snapshot stored on the
+  user's last audit row.
+- Headline stat cards: total events, logins (24h / 7d), failed logins
+  (24h / total), blocked attempts (total).
+- Last-login and last-failed-login summary lines including IP,
+  device, OS and browser context.
+- Login pattern heatmap: 7 (Mon-Sun) × 24 (hours of day) grid showing
+  when this user actually uses the system over the last 90 days.
+  Cell color intensity scales with the bucket count; hover reveals
+  the exact time-slot and count.
+- Top-IPs / top-devices / top-browsers boxes (last 90 days).
+- Sortable, paginated activity log (50 per page) scoped to the user.
+
+### Changed
+- *User* column in the Logs list is now a link when `userId` is set;
+  failed logins without a matching user keep showing a plain `—`.
+
 ## 1.2.2 - 2026-04-24
 
 ### Fixed

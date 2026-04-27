@@ -24,11 +24,17 @@ break in?* — without stitching it together from three different log files.
   - Client: `pwa` (if the `X-Reest-Client: pwa` header is sent) or `browser`
   - User groups snapshot (comma-separated handles at login time)
   - Free-form JSON metadata column for custom event payloads
-- **Control-panel viewer**: two-page layout split into *Logs* and *Monitor*.
+- **Control-panel viewer**: two-page layout split into *Logs* and *Monitor*,
+  plus a per-user drilldown.
   - **Logs**: searchable / filterable / sortable index with debounced live
     filter (from 2 chars), CSV export (streamed, UTF-8 BOM for Excel).
-  - **Monitor**: smooth time-series chart of activity with dropdowns
-    (event, context, client) and a 24 h / 48 h / 7 d window picker.
+    Click any user-id to drill into that user's activity.
+  - **Monitor**: smooth multi-series time-series chart with checkbox
+    filters (event, context, client) and a 24 h / 48 h / 7 d / month /
+    30 d / 90 d window picker.
+  - **User trace** (`/user-audit/user/<userId>`): identity card,
+    headline stat cards, 7×24 login-pattern heatmap (90 days), top
+    IPs / devices / browsers, and the user's full activity log.
 - **Dashboard widget**: 24h logins / logouts / failed + top-5 failing IPs.
 - **Failed-login throttling**: sliding-window rate limit per IP and per email.
   Exceeding the limit returns HTTP 429 and creates a `login_blocked` audit

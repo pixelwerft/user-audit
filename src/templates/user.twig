@@ -1,0 +1,330 @@
+{% extends '_layouts/cp' %}
+
+{% set displayName = targetUser ? (targetUser.fullName ?? targetUser.username ?? fallbackEmail) : fallbackEmail %}
+{% set title = ('User #%s'|t('user-audit'))|format(targetUserId) ~ (displayName ? ' · ' ~ displayName : '') %}
+{% set selectedSubnavItem = 'logs' %}
+
+{% set crumbs = [
+  { label: 'User Audit'|t('user-audit'), url: cpUrl('user-audit/logs') },
+  { label: ('User #%s'|t('user-audit'))|format(targetUserId) }
+] %}
+
+{% set sortableColumns = {
+  dateCreated: 'Time'|t('user-audit'),
+  eventType: 'Event'|t('user-audit'),
+  context: 'Context'|t('user-audit'),
+  client: 'Client'|t('user-audit'),
+  ipAddress: 'IP'|t('user-audit'),
+  deviceType: 'Device'|t('user-audit'),
+  osName: 'OS'|t('user-audit'),
+  browserName: 'Browser'|t('user-audit'),
+  failureReason: 'Reason'|t('user-audit'),
+} %}
+
+{% macro sortHeader(col, label, currentSort, currentDir, baseUrl) %}
+  {% set isActive = currentSort == col %}
+  {% set nextDir = (isActive and currentDir == 'asc') ? 'desc' : 'asc' %}
+  {% set url = baseUrl ~ '?sort=' ~ col ~ '&dir=' ~ nextDir %}
+  <a href="{{ url }}" style="color: inherit; text-decoration: none; display: inline-flex; align-items: center; gap: 0.25rem;">
+    <span>{{ label }}</span>
+    {% if isActive %}
+      <span style="font-size: 0.7rem; opacity: 0.7;">{{ currentDir == 'asc' ? '↑' : '↓' }}</span>
+    {% else %}
+      <span style="font-size: 0.7rem; opacity: 0.25;">↕</span>
+    {% endif %}
+  </a>
+{% endmacro %}
+
+{% block content %}
+
+{# ─── Identity card ──────────────────────────────────────────────── #}
+<div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1rem 1.25rem; background: #fafafa; margin-bottom: 1rem;">
+  <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+    <div style="width: 48px; height: 48px; border-radius: 50%; background: #e0e4ff; display: inline-flex; align-items: center; justify-content: center; font-size: 1.5rem;">👤</div>
+    <div style="flex: 1; min-width: 200px;">
+      <div style="font-size: 1.15rem; font-weight: 600;">
+        {% if targetUser %}
+          {{ targetUser.fullName ?? targetUser.username }}
+        {% else %}
+          <span style="color: #b91c1c;">{{ 'User #%s (deleted)'|t('user-audit')|format(targetUserId) }}</span>
+        {% endif %}
+      </div>
+      <div class="light" style="font-size: 0.85rem;">
+        {{ targetUser ? targetUser.email : fallbackEmail ?: '—' }}
+        · {{ 'User-ID'|t('user-audit') }}: {{ targetUserId }}
+        {% if targetUser %}
+          · {% if targetUser.suspended %}<span style="color: #b91c1c;">{{ 'Suspended'|t('user-audit') }}</span>{% elseif targetUser.locked %}<span style="color: #b91c1c;">{{ 'Locked'|t('user-audit') }}</span>{% else %}<span style="color: #16a34a;">{{ 'Active'|t('user-audit') }}</span>{% endif %}
+        {% endif %}
+      </div>
+      <div style="margin-top: 0.4rem;">
+        {% set groupHandles = [] %}
+        {% if targetUser %}
+          {% for g in targetUser.getGroups() %}
+            {% set groupHandles = groupHandles|merge([g.handle]) %}
+          {% endfor %}
+        {% elseif fallbackGroups %}
+          {% set groupHandles = fallbackGroups|split(',') %}
+        {% endif %}
+        {% if groupHandles|length %}
+          {% for g in groupHandles %}
+            <span style="padding: 0.1rem 0.45rem; border-radius: 3px; background: #eef; font-size: 0.75rem; margin-right: 0.2rem;">{{ g }}</span>
+          {% endfor %}
+        {% else %}
+          <span class="light" style="font-size: 0.8rem;">{{ 'No groups'|t('user-audit') }}</span>
+        {% endif %}
+      </div>
+    </div>
+    {% if targetUser %}
+      <div>
+        <a href="{{ cpUrl('users/' ~ targetUserId) }}" class="btn">{{ 'Edit user'|t('user-audit') }}</a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{# ─── Stat cards ─────────────────────────────────────────────────── #}
+{% set cards = [
+  { label: 'Total events'|t('user-audit'),         value: stats.total },
+  { label: 'Logins (24h)'|t('user-audit'),         value: stats.logins24h },
+  { label: 'Logins (7d)'|t('user-audit'),          value: stats.logins7d },
+  { label: 'Failed (24h)'|t('user-audit'),         value: stats.failed24h, accentColor: stats.failed24h > 0 ? '#fff4e5' },
+  { label: 'Failed (total)'|t('user-audit'),       value: stats.failedTotal, accentColor: stats.failedTotal > 0 ? '#fff4e5' },
+  { label: 'Blocked (total)'|t('user-audit'),      value: stats.blockedTotal, accentColor: stats.blockedTotal > 0 ? '#ffe5e5' },
+] %}
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem;">
+  {% for c in cards %}
+    <div style="border: 1px solid #e0e0e0; border-radius: 6px; padding: 0.75rem 1rem; background: {{ c.accentColor ?? '#fafafa' }};">
+      <div class="light" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;">{{ c.label }}</div>
+      <div style="font-size: 1.6rem; font-weight: 600; line-height: 1.15;">{{ c.value }}</div>
+    </div>
+  {% endfor %}
+</div>
+
+{# ─── Last login summary ─────────────────────────────────────────── #}
+<div style="display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; font-size: 0.85rem;">
+  <div>
+    <div class="light" style="font-size: 0.7rem; text-transform: uppercase;">{{ 'Last login'|t('user-audit') }}</div>
+    {% if lastLogin %}
+      <div>{{ lastLogin.dateCreated|date('Y-m-d H:i:s') }}
+        · {{ lastLogin.context|default('—')|upper }}
+        {% if lastLogin.client %} · {{ lastLogin.client }}{% endif %}
+      </div>
+      <div class="light">
+        {% if lastLogin.ipAddress %}{{ lastLogin.ipAddress }}{% endif %}
+        {% if lastLogin.deviceType %} · {{ lastLogin.deviceType }}{% endif %}
+        {% if lastLogin.osName %} · {{ lastLogin.osName }}{% if lastLogin.osVersion %} {{ lastLogin.osVersion }}{% endif %}{% endif %}
+        {% if lastLogin.browserName %} · {{ lastLogin.browserName }}{% if lastLogin.browserVersion %} {{ lastLogin.browserVersion }}{% endif %}{% endif %}
+      </div>
+    {% else %}
+      <div class="light">{{ 'Never'|t('user-audit') }}</div>
+    {% endif %}
+  </div>
+  <div>
+    <div class="light" style="font-size: 0.7rem; text-transform: uppercase;">{{ 'Last failed login'|t('user-audit') }}</div>
+    {% if lastFailed %}
+      <div>{{ lastFailed.dateCreated|date('Y-m-d H:i:s') }}
+        {% if lastFailed.failureReason %} · <code>{{ lastFailed.failureReason }}</code>{% endif %}
+      </div>
+      <div class="light">{% if lastFailed.ipAddress %}{{ lastFailed.ipAddress }}{% endif %}</div>
+    {% else %}
+      <div class="light">{{ 'Never'|t('user-audit') }}</div>
+    {% endif %}
+  </div>
+</div>
+
+{# ─── Heatmap (7 × 24, last 90 days) ─────────────────────────────── #}
+<div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1rem; background: #fff; margin-bottom: 1.5rem;">
+  <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.6rem;">
+    <h3 style="margin: 0;">{{ 'Login pattern (90 days)'|t('user-audit') }}</h3>
+    <span class="light" style="font-size: 0.75rem;">
+      {{ heatmapTotal }} {{ heatmapTotal == 1 ? 'login'|t('user-audit') : 'logins'|t('user-audit') }}
+    </span>
+  </div>
+
+  {% if heatmapTotal == 0 %}
+    <p class="light" style="font-size: 0.85rem; margin: 0.5rem 0;">
+      {{ 'No login activity in the last 90 days.'|t('user-audit') }}
+    </p>
+  {% else %}
+    {% set dayLabels = [
+      'Mon'|t('user-audit'),
+      'Tue'|t('user-audit'),
+      'Wed'|t('user-audit'),
+      'Thu'|t('user-audit'),
+      'Fri'|t('user-audit'),
+      'Sat'|t('user-audit'),
+      'Sun'|t('user-audit'),
+    ] %}
+    <div class="ua-heatmap">
+      <div class="ua-heatmap-grid">
+        {# Top axis: hours 0..23 #}
+        <div class="ua-heatmap-axis-cell"></div>
+        {% for h in 0..23 %}
+          <div class="ua-heatmap-axis-cell">
+            {# Show 0/3/6/9/12/15/18/21 for readability — every 3 hours #}
+            {% if h % 3 == 0 %}{{ h }}{% endif %}
+          </div>
+        {% endfor %}
+
+        {# Body: one row per day #}
+        {% for d in 1..7 %}
+          <div class="ua-heatmap-axis-cell ua-heatmap-day">{{ dayLabels[d - 1] }}</div>
+          {% for h in 0..23 %}
+            {% set count = heatmap[d][h] %}
+            {% set ratio = heatmapMax > 0 ? count / heatmapMax : 0 %}
+            {# Min visible alpha so non-zero buckets stand out from empty ones #}
+            {% set alpha = count > 0 ? (0.15 + ratio * 0.7) : 0 %}
+            <div class="ua-heatmap-cell"
+                 style="background: rgba(47,128,237,{{ alpha }});"
+                 title="{{ dayLabels[d - 1] }} {{ '%02d:00'|format(h) }} — {{ count }}">
+              {% if count > 0 and ratio > 0.5 %}{{ count }}{% endif %}
+            </div>
+          {% endfor %}
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+{# ─── Top IPs / devices / browsers ─────────────────────────────── #}
+{% if topIps|length or topDevices|length or topBrowsers|length %}
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+    {% set boxes = [
+      { title: 'Top IPs (90d)'|t('user-audit'), items: topIps },
+      { title: 'Top devices (90d)'|t('user-audit'), items: topDevices },
+      { title: 'Top browsers (90d)'|t('user-audit'), items: topBrowsers },
+    ] %}
+    {% for box in boxes %}
+      {% if box.items|length %}
+        <div style="border: 1px solid #e0e0e0; border-radius: 6px; padding: 0.75rem 1rem; background: #fff;">
+          <div class="light" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem;">{{ box.title }}</div>
+          <ul style="list-style: none; padding: 0; margin: 0;">
+            {% for it in box.items %}
+              <li style="display: flex; justify-content: space-between; padding: 0.2rem 0; border-bottom: 1px dashed #eee; font-size: 0.85rem;">
+                <code style="font-size: 0.8rem;">{{ it.value }}</code>
+                <span style="font-variant-numeric: tabular-nums;">{{ it.count }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+{% endif %}
+
+{# ─── Full activity log for this user ───────────────────────────── #}
+<h3 style="margin: 1.5rem 0 0.5rem;">{{ 'Activity log'|t('user-audit') }}</h3>
+
+<div class="ua-table-scroll">
+  <div class="tableview">
+    <table class="data fullwidth">
+      <thead>
+        <tr>
+          {% for col, label in sortableColumns %}
+            <th style="white-space: nowrap;">
+              {{ _self.sortHeader(col, label, sort, dir, cpUrl('user-audit/user/' ~ targetUserId)) }}
+            </th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td><span class="light">{{ row.dateCreated|date('Y-m-d H:i:s') }}</span></td>
+            <td><code>{{ row.eventType }}</code></td>
+            <td>
+              {% if row.context == 'cp' %}
+                <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #e0e4ff; font-size: 0.7rem;">CP</span>
+              {% elseif row.context == 'fe' %}
+                <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #e0ffe4; font-size: 0.7rem;">FE</span>
+              {% else %}
+                <span class="light">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if row.client == 'pwa' %}
+                <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #ffe8cc; font-size: 0.7rem;">PWA</span>
+              {% elseif row.client == 'browser' %}
+                <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #f0f0f0; font-size: 0.7rem;">{{ 'Browser'|t('user-audit') }}</span>
+              {% else %}
+                <span class="light">—</span>
+              {% endif %}
+            </td>
+            <td>{{ row.ipAddress ?: '—' }}</td>
+            <td>{{ row.deviceType ?: '—' }}</td>
+            <td>{{ row.osName ?: '—' }}{% if row.osVersion %} {{ row.osVersion }}{% endif %}</td>
+            <td>{{ row.browserName ?: '—' }}{% if row.browserVersion %} {{ row.browserVersion }}{% endif %}</td>
+            <td>{{ row.failureReason ?: '—' }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="9" class="centeralign light">{{ 'No entries yet.'|t('user-audit') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if pageCount > 1 %}
+  <nav class="pagination" style="margin-top: 1rem;">
+    {% set pageBase = cpUrl('user-audit/user/' ~ targetUserId) %}
+    {% set pageQs = '?sort=' ~ sort ~ '&dir=' ~ dir %}
+    {% if page > 1 %}
+      <a class="btn" href="{{ pageBase ~ pageQs ~ '&page=' ~ (page - 1) }}">&larr; {{ 'Previous'|t('user-audit') }}</a>
+    {% endif %}
+    <span class="light" style="margin: 0 0.75rem;">
+      {{ 'Page %s of %s'|t('user-audit')|format(page, pageCount) }} &middot;
+      {{ '%s entries'|t('user-audit')|format(total) }}
+    </span>
+    {% if page < pageCount %}
+      <a class="btn" href="{{ pageBase ~ pageQs ~ '&page=' ~ (page + 1) }}">{{ 'Next'|t('user-audit') }} &rarr;</a>
+    {% endif %}
+  </nav>
+{% endif %}
+
+{% css %}
+.ua-table-scroll {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.ua-table-scroll .tableview { overflow: visible; max-width: none; }
+.ua-table-scroll table.data,
+.ua-table-scroll table.data.fullwidth { width: auto; min-width: 100%; }
+
+.ua-heatmap { overflow-x: auto; }
+.ua-heatmap-grid {
+  display: grid;
+  grid-template-columns: 32px repeat(24, minmax(20px, 1fr));
+  grid-auto-rows: 22px;
+  gap: 2px;
+  min-width: 540px;
+}
+.ua-heatmap-axis-cell {
+  font-size: 0.65rem;
+  color: #888;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+.ua-heatmap-day { justify-content: flex-start; padding-left: 0.25rem; }
+.ua-heatmap-cell {
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+  background: #f3f4f6;
+  transition: transform 0.08s ease;
+}
+.ua-heatmap-cell:hover { transform: scale(1.15); outline: 1px solid #2f80ed; }
+{% endcss %}
+
+{% endblock %}

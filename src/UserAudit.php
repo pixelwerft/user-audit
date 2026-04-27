@@ -314,6 +314,11 @@ class UserAudit extends Plugin
                 // page keep working.
                 $event->rules['user-audit/active'] = 'user-audit/activity/monitor';
                 $event->rules['user-audit/export'] = 'user-audit/activity/export';
+                // User trace: drill into a single user's activity.
+                // The action receives userId via the action params,
+                // so we constrain the URL token to digits and forward
+                // it explicitly.
+                $event->rules['user-audit/user/<userId:\d+>'] = 'user-audit/activity/user';
             }
         );
     }
