@@ -155,7 +155,15 @@
               —
             {% endif %}
           </td>
-          <td>{{ row.email ?: '—' }}</td>
+          <td>
+            {% if row.email and row.userId %}
+              <a href="{{ cpUrl('user-audit/user/' ~ row.userId) }}" title="{{ 'Show all activity for this user'|t('user-audit') }}">
+                {{ row.email }}
+              </a>
+            {% else %}
+              {{ row.email ?: '—' }}
+            {% endif %}
+          </td>
           <td>
             {% if row.userGroups %}
               {% for g in row.userGroups|split(',') %}
