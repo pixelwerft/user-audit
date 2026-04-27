@@ -3,6 +3,13 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.3.1 - 2026-04-27
+
+### Changed
+- *Email / Login* column in the Logs list is now also a link to the
+  user trace page when the row has a `userId`. Failed-login rows
+  without a matched user keep showing the email as plain text.
+
 ## 1.3.0 - 2026-04-24
 
 ### Added
