@@ -67,7 +67,12 @@ class ActivityController extends Controller
     {
         $request = Craft::$app->getRequest();
         $page = max(1, (int)$request->getQueryParam('page', 1));
-        $perPage = 100;
+        // 50/page matches Craft's standard element-index default and
+        // shaves ~halve the row-render time without losing useful
+        // density. Bumped down from 100 in v1.3.2 — at 100 the Twig
+        // render of 11 columns × per-row macros became the dominant
+        // cost on the page.
+        $perPage = 50;
         $eventType = (string)$request->getQueryParam('event', '');
         $context = (string)$request->getQueryParam('context', '');
         $client = (string)$request->getQueryParam('client', '');
@@ -485,26 +490,41 @@ class ActivityController extends Controller
             ->all();
 
         // ---- Headline stats ------------------------------------------
+        // Single roll-up query with conditional aggregation: replaces
+        // the 6 separate COUNT(*) round-trips that v1.3.1 fired off.
+        // CASE WHEN ... THEN 1 ELSE 0 with SUM is portable across
+        // MySQL/MariaDB/Postgres; using COUNT() with the boolean would
+        // not be (Postgres returns 0/1 ints, MySQL doesn't).
         $db = Craft::$app->getDb();
-        $countByEventInWindow = static function (string $eventType, ?int $windowHours)
-        use ($db, $userId): int {
-            $sql = 'SELECT COUNT(*) FROM {{%user_activity_log}}
-                    WHERE [[userId]] = :u AND [[eventType]] = :t';
-            $params = [':u' => $userId, ':t' => $eventType];
-            if ($windowHours !== null) {
-                $sql .= ' AND [[dateCreated]] >= :since';
-                $params[':since'] = (new \DateTime("-{$windowHours} hours"))->format('Y-m-d H:i:s');
-            }
-            return (int)$db->createCommand($sql, $params)->queryScalar();
-        };
+        $cutoff24h = (new \DateTime('-24 hours'))->format('Y-m-d H:i:s');
+        $cutoff7d = (new \DateTime('-7 days'))->format('Y-m-d H:i:s');
+
+        $statsRow = $db->createCommand(
+            'SELECT
+                SUM(CASE WHEN [[eventType]] = :loginEvt   AND [[dateCreated]] >= :h24 THEN 1 ELSE 0 END) AS logins24h,
+                SUM(CASE WHEN [[eventType]] = :loginEvt   AND [[dateCreated]] >= :d7  THEN 1 ELSE 0 END) AS logins7d,
+                SUM(CASE WHEN [[eventType]] = :failedEvt  AND [[dateCreated]] >= :h24 THEN 1 ELSE 0 END) AS failed24h,
+                SUM(CASE WHEN [[eventType]] = :failedEvt                              THEN 1 ELSE 0 END) AS failedTotal,
+                SUM(CASE WHEN [[eventType]] = :blockedEvt                             THEN 1 ELSE 0 END) AS blockedTotal
+             FROM {{%user_activity_log}}
+             WHERE [[userId]] = :u',
+            [
+                ':u' => $userId,
+                ':loginEvt' => ActivityLogService::EVENT_LOGIN,
+                ':failedEvt' => ActivityLogService::EVENT_LOGIN_FAILED,
+                ':blockedEvt' => ActivityLogService::EVENT_LOGIN_BLOCKED,
+                ':h24' => $cutoff24h,
+                ':d7' => $cutoff7d,
+            ]
+        )->queryOne();
 
         $stats = [
             'total' => $total,
-            'logins24h' => $countByEventInWindow(ActivityLogService::EVENT_LOGIN, 24),
-            'logins7d' => $countByEventInWindow(ActivityLogService::EVENT_LOGIN, 24 * 7),
-            'failed24h' => $countByEventInWindow(ActivityLogService::EVENT_LOGIN_FAILED, 24),
-            'failedTotal' => $countByEventInWindow(ActivityLogService::EVENT_LOGIN_FAILED, null),
-            'blockedTotal' => $countByEventInWindow(ActivityLogService::EVENT_LOGIN_BLOCKED, null),
+            'logins24h' => (int)($statsRow['logins24h'] ?? 0),
+            'logins7d' => (int)($statsRow['logins7d'] ?? 0),
+            'failed24h' => (int)($statsRow['failed24h'] ?? 0),
+            'failedTotal' => (int)($statsRow['failedTotal'] ?? 0),
+            'blockedTotal' => (int)($statsRow['blockedTotal'] ?? 0),
         ];
 
         $lastLogin = UserActivityLog::find()
@@ -538,11 +558,20 @@ class ActivityController extends Controller
         $topBrowsers = $topField('browserName');
 
         // ---- Heatmap: 7 (Mon-Sun) × 24 (hours) over 90 days ----------
-        // Aggregated in PHP from raw timestamps so the date math stays
-        // portable across MySQL/MariaDB/Postgres. Only login events
-        // count — failed/blocked/logout would distort the "when does
-        // this user actually use the system?" picture the heatmap is
-        // meant to answer.
+        // Bucket at the DB level via GROUP BY (weekday, hour) so the
+        // result set is bounded to ≤168 rows regardless of how active
+        // the user is. v1.3.1 pulled every login row of the last 90
+        // days into PHP and counted them in a foreach — for power
+        // users that turned the page into a multi-second load.
+        //
+        // Driver-specific expressions because there is no single
+        // standard for "weekday number" across MySQL/MariaDB/Postgres:
+        //   - MySQL/MariaDB: WEEKDAY() returns 0=Mon..6=Sun. We add 1
+        //     to align with PHP's ISO-N (1=Mon..7=Sun).
+        //   - Postgres:      EXTRACT(ISODOW) returns 1=Mon..7=Sun.
+        // Only login events count — failed/blocked/logout would
+        // distort the "when does this user actually use the system?"
+        // picture the heatmap is meant to answer.
         $heatmap = [];
         for ($d = 1; $d <= 7; $d++) {
             for ($h = 0; $h <= 23; $h++) {
@@ -552,21 +581,41 @@ class ActivityController extends Controller
         $heatmapMax = 0;
         $heatmapTotal = 0;
 
-        $loginRows = (new \yii\db\Query())
-            ->select(['dateCreated'])
+        $isPg = $db->getDriverName() === 'pgsql';
+        if ($isPg) {
+            $dowExpr = 'EXTRACT(ISODOW FROM [[dateCreated]])::int';
+            $hourExpr = 'EXTRACT(HOUR FROM [[dateCreated]])::int';
+        } else {
+            $dowExpr = '(WEEKDAY([[dateCreated]]) + 1)';
+            $hourExpr = 'HOUR([[dateCreated]])';
+        }
+
+        $heatmapBuckets = (new \yii\db\Query())
+            ->select([
+                'dow' => new \yii\db\Expression($dowExpr),
+                'hr' => new \yii\db\Expression($hourExpr),
+                'c' => new \yii\db\Expression('COUNT(*)'),
+            ])
             ->from('{{%user_activity_log}}')
             ->where(['userId' => $userId, 'eventType' => ActivityLogService::EVENT_LOGIN])
             ->andWhere(['>=', 'dateCreated', $cutoff90])
+            ->groupBy([new \yii\db\Expression($dowExpr), new \yii\db\Expression($hourExpr)])
             ->all();
 
-        foreach ($loginRows as $r) {
-            $dt = new \DateTime($r['dateCreated']);
-            $dow = (int)$dt->format('N'); // ISO weekday: 1 (Mon) - 7 (Sun)
-            $hour = (int)$dt->format('G'); // 0-23
-            $heatmap[$dow][$hour]++;
-            $heatmapTotal++;
-            if ($heatmap[$dow][$hour] > $heatmapMax) {
-                $heatmapMax = $heatmap[$dow][$hour];
+        foreach ($heatmapBuckets as $b) {
+            $dow = (int)$b['dow'];
+            $hour = (int)$b['hr'];
+            $count = (int)$b['c'];
+            // Defensive: if a future driver returns dow=0 (Sun-based)
+            // we'd land outside the initialized 1..7 grid. Skip it
+            // rather than silently producing a malformed heatmap.
+            if ($dow < 1 || $dow > 7 || $hour < 0 || $hour > 23) {
+                continue;
+            }
+            $heatmap[$dow][$hour] = $count;
+            $heatmapTotal += $count;
+            if ($count > $heatmapMax) {
+                $heatmapMax = $count;
             }
         }
 
