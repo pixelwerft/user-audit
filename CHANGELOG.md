@@ -3,6 +3,32 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.3.2 - 2026-04-29
+
+### Changed
+- Logs list page size lowered from 100 to 50 entries per page,
+  matching Craft's element-index default. The Twig render of 11
+  columns × per-row macros at 100 rows was the dominant cost on
+  the page; halving it cuts log-list render time roughly in half
+  without losing useful density.
+
+### Performance
+- User trace page now executes a single roll-up query for the six
+  headline stats (total, logins 24h/7d, failed 24h/total, blocked
+  total) via conditional `SUM(CASE WHEN …)` aggregation, replacing
+  six separate `COUNT(*)` round-trips. The CASE-WHEN form stays
+  portable across MySQL/MariaDB/Postgres.
+- User trace login heatmap (7 × 24 buckets over 90 days) is now
+  bucketed at the database level with a single
+  `GROUP BY weekday, hour` query — result set is bounded to ≤168
+  rows regardless of how active the user is. v1.3.1 pulled every
+  login row of the last 90 days into PHP and counted them in a
+  foreach, which turned the page into a multi-second load for
+  power users with thousands of login events. Driver-specific
+  weekday expressions (`WEEKDAY+1` on MySQL/MariaDB,
+  `EXTRACT(ISODOW)` on Postgres) keep the 1=Mon..7=Sun mapping
+  identical to the previous PHP-side `format('N')`.
+
 ## 1.3.1 - 2026-04-27
 
 ### Changed
