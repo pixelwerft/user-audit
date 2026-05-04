@@ -3,6 +3,62 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2.0.0 - 2026-05-05
+
+### Breaking
+- The audit log has been promoted to a first-class **Craft element
+  type**. Existing audit rows are migrated automatically: the install
+  migration adds an `elementId` FK to `{{%user_activity_log}}` and
+  back-fills one element per existing row in 500-row batches.
+  Resumable on interruption — rerun `./craft up` if it stops mid-way.
+  Plan for upgrade time roughly proportional to row count
+  (~10 ms/row direct insert).
+- `./craft user-audit/purge/run` no longer hard-deletes. It now
+  **soft-deletes** via Crafts element trash (sets `dateDeleted`).
+  Rotated rows disappear from the default index but remain queryable
+  via the new "Soft-deleted" source and exportable via CSV with the
+  new `deleted_at` column.
+- Hard-delete is now an **explicit, console-only operation**:
+  `./craft user-audit/purge/hard --before=YYYY-MM-DD [--user-id=N]`.
+  Refuses to run without at least one filter, prompts for
+  confirmation interactively, and warns that hard-deleted rows are
+  unrecoverable and will not appear in any subsequent CSV export.
+- The CSV export now contains an additional trailing `deleted_at`
+  column (empty for live rows, ISO timestamp for soft-deleted ones).
+  Downstream importers that hard-coded the column count must adjust.
+
+### Added
+- Standard Craft element-index UI for `/admin/user-audit`:
+  source-sidebar with quick filters (All, by event type, by context,
+  Soft-deleted archive), status pills coloured by event type
+  (login=green, logout=gray, login_failed=orange,
+  login_blocked=red, session_expired=blue, custom=fuchsia), sortable
+  sticky-header table, native search index, ajax pagination, column
+  picker that remembers per-user preference, keyboard navigation.
+- New read-only detail view at `/admin/user-audit/log/<elementId>`,
+  reachable by clicking the title in the index. Shows identity,
+  context, network, user-agent (parsed + raw) and the JSON metadata
+  payload of custom events. Soft-deleted entries display a banner
+  with the rotation timestamp. "Show user trace" button jumps to
+  the per-user dashboard when `userId` is set.
+- `./craft user-audit/purge/hard` console command (see Breaking).
+
+### Changed
+- `ActivityLogService::log()` now writes the element shell first and
+  then the audit row in a single DB transaction, so a save-failure
+  on either side leaves no orphans behind. Public signature
+  unchanged — callers feel nothing.
+- The legacy hand-rolled filter form, ad-hoc sortable headers and
+  custom pagination on the logs index were removed; their job is
+  handled by the standard Craft element-index layout now.
+
+### Notes for v2.0 release planning
+- v2.0 ships option **α** for the detail view (full-page detail
+  reachable via title-click). Slideout option β
+  (Element-Editor-based) was dropped from the v2.0 scope to avoid
+  fighting Crafts new element editor — page-level detail is robust
+  and a follow-up release can iterate on slideout polish.
+
 ## 1.3.2 - 2026-04-29
 
 ### Changed
