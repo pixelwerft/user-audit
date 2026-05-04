@@ -4,6 +4,7 @@ namespace pixelwerft\useraudit\services;
 
 use Craft;
 use craft\base\Component;
+use pixelwerft\useraudit\elements\AuditLog;
 use pixelwerft\useraudit\records\UserActivityLog;
 use pixelwerft\useraudit\UserAudit;
 
@@ -107,30 +108,59 @@ class ActivityLogService extends Component
                 $groups = null;
             }
 
-            $record = new UserActivityLog();
-            $record->userId = $userId;
-            $record->email = $meta['email'] ?? null;
-            $record->userGroups = $groups;
-            $record->eventType = $eventType;
-            $record->context = $context;
-            $record->client = $client;
-            $record->failureReason = $meta['failureReason'] ?? null;
-            $record->ipAddress = $ip;
-            $record->userAgent = $ua;
-            $record->deviceType = $parsed['deviceType'];
-            $record->osName = $parsed['osName'];
-            $record->osVersion = $parsed['osVersion'];
-            $record->browserName = $parsed['browserName'];
-            $record->browserVersion = $parsed['browserVersion'];
+            // v2.0+: each audit row is also a Craft element. Create
+            // the element shell first to get an ID, then save the
+            // audit record with elementId set. Wrapped in a single
+            // transaction so a save-failure on either side leaves no
+            // orphans behind.
+            $db = Craft::$app->getDb();
+            $transaction = $db->beginTransaction();
+            try {
+                $element = new AuditLog();
+                if (!Craft::$app->getElements()->saveElement($element, false)) {
+                    throw new \RuntimeException(
+                        'AuditLog element save failed: '
+                        . implode('; ', $element->getFirstErrors() ?: ['unknown'])
+                    );
+                }
 
-            if (isset($meta['metadata']) && is_array($meta['metadata'])) {
-                $record->metadata = json_encode(
-                    $meta['metadata'],
-                    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-                );
+                $record = new UserActivityLog();
+                $record->elementId = (int)$element->id;
+                $record->userId = $userId;
+                $record->email = $meta['email'] ?? null;
+                $record->userGroups = $groups;
+                $record->eventType = $eventType;
+                $record->context = $context;
+                $record->client = $client;
+                $record->failureReason = $meta['failureReason'] ?? null;
+                $record->ipAddress = $ip;
+                $record->userAgent = $ua;
+                $record->deviceType = $parsed['deviceType'];
+                $record->osName = $parsed['osName'];
+                $record->osVersion = $parsed['osVersion'];
+                $record->browserName = $parsed['browserName'];
+                $record->browserVersion = $parsed['browserVersion'];
+
+                if (isset($meta['metadata']) && is_array($meta['metadata'])) {
+                    $record->metadata = json_encode(
+                        $meta['metadata'],
+                        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+                    );
+                }
+
+                if (!$record->save()) {
+                    throw new \RuntimeException(
+                        'UserActivityLog record save failed: '
+                        . implode('; ', $record->getFirstErrors() ?: ['unknown'])
+                    );
+                }
+
+                $transaction->commit();
+                return true;
+            } catch (\Throwable $e) {
+                $transaction->rollBack();
+                throw $e;
             }
-
-            return $record->save();
         } catch (\Throwable $e) {
             Craft::error(
                 '[user-audit] failed to write activity log: ' . $e->getMessage(),

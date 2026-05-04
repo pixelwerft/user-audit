@@ -6,6 +6,7 @@ use craft\db\ActiveRecord;
 
 /**
  * @property int $id
+ * @property int $elementId v2.0+ FK to {{%elements}}.id
  * @property int|null $userId
  * @property string|null $email
  * @property string|null $userGroups

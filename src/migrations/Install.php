@@ -26,6 +26,11 @@ class Install extends Migration
 
         $this->createTable('{{%user_activity_log}}', [
             'id' => $this->primaryKey(),
+            // v2.0+: every audit row is also a Craft element. The FK
+            // is filled in by ActivityLogService::log() right before
+            // the row is saved. For fresh installs the column starts
+            // out NOT NULL — there is nothing to backfill.
+            'elementId' => $this->integer()->notNull(),
             'userId' => $this->integer(),
             'email' => $this->string(255),
             'userGroups' => $this->string(512),
@@ -51,6 +56,8 @@ class Install extends Migration
         $this->createIndex(null, '{{%user_activity_log}}', 'context');
         $this->createIndex(null, '{{%user_activity_log}}', 'client');
         $this->createIndex(null, '{{%user_activity_log}}', 'dateCreated');
+        // Unique elementId — one element per audit row.
+        $this->createIndex(null, '{{%user_activity_log}}', 'elementId', true);
 
         $this->addForeignKey(
             null,
@@ -59,6 +66,18 @@ class Install extends Migration
             '{{%users}}',
             'id',
             'SET NULL',
+            null
+        );
+
+        // ON DELETE CASCADE: the explicit `purge/hard` console command
+        // deletes the element; MySQL drops the audit row alongside.
+        $this->addForeignKey(
+            null,
+            '{{%user_activity_log}}',
+            'elementId',
+            '{{%elements}}',
+            'id',
+            'CASCADE',
             null
         );
 

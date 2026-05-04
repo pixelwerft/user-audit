@@ -11,9 +11,11 @@ use craft\events\RegisterComponentTypesEvent;
 use craft\events\RegisterCpNavItemsEvent;
 use craft\events\RegisterUrlRulesEvent;
 use craft\services\Dashboard;
+use craft\services\Elements;
 use craft\web\User as WebUser;
 use craft\web\UrlManager;
 use craft\web\twig\variables\Cp;
+use pixelwerft\useraudit\elements\AuditLog;
 use pixelwerft\useraudit\models\Settings;
 use pixelwerft\useraudit\services\ActivityLogService;
 use pixelwerft\useraudit\services\UserAgentParser;
@@ -38,7 +40,7 @@ use yii\web\UserEvent;
  */
 class UserAudit extends Plugin
 {
-    public string $schemaVersion = '1.2.0';
+    public string $schemaVersion = '2.0.0';
     public bool $hasCpSettings = true;
 
     public static function config(): array
@@ -71,6 +73,7 @@ class UserAudit extends Plugin
         $this->registerCpRoutes();
         $this->registerCpNav();
         $this->registerDashboardWidgets();
+        $this->registerElementTypes();
     }
 
     /**
@@ -319,6 +322,26 @@ class UserAudit extends Plugin
                 // so we constrain the URL token to digits and forward
                 // it explicitly.
                 $event->rules['user-audit/user/<userId:\d+>'] = 'user-audit/activity/user';
+                // v2.0: read-only detail view for a single audit row.
+                // Title-click in the element index opens this URL.
+                $event->rules['user-audit/log/<elementId:\d+>'] = 'user-audit/activity/log';
+            }
+        );
+    }
+
+    /**
+     * Registers the AuditLog element type. v2.0+: every audit row has
+     * a corresponding element so the standard CP element-index can
+     * render the logs list with status pills, source-sidebar and
+     * native search.
+     */
+    private function registerElementTypes(): void
+    {
+        Event::on(
+            Elements::class,
+            Elements::EVENT_REGISTER_ELEMENT_TYPES,
+            function (RegisterComponentTypesEvent $event) {
+                $event->types[] = AuditLog::class;
             }
         );
     }
