@@ -1,0 +1,290 @@
+{# v2.0: read-only detail view for a single audit log entry.
+
+   Reached by clicking the title in the element-index. Title-click in
+   v2.0 navigates to a full page rather than a slideout — the slideout
+   approach (Crafts Element Editor with read-only field rendering) is
+   deferred to v2.1; for v2.0 the page-level detail is robust and
+   needs no fight against the editor's edit-form assumptions. #}
+{% extends '_layouts/cp' %}
+
+{% set title = 'Audit log entry'|t('user-audit') %}
+{% set selectedSubnavItem = 'logs' %}
+
+{% set crumbs = [
+  { label: 'User Audit'|t('user-audit'), url: cpUrl('user-audit/logs') },
+  { label: 'Logs'|t('user-audit'),       url: cpUrl('user-audit/logs') }
+] %}
+
+{% set statusMap = {
+  'login':           { label: 'Login'|t('user-audit'),    color: '#16a34a', bg: '#dcfce7' },
+  'logout':          { label: 'Logout'|t('user-audit'),   color: '#475569', bg: '#f1f5f9' },
+  'login_failed':    { label: 'Failed'|t('user-audit'),   color: '#c2410c', bg: '#fff7ed' },
+  'login_blocked':   { label: 'Blocked'|t('user-audit'),  color: '#b91c1c', bg: '#fee2e2' },
+  'session_expired': { label: 'Expired'|t('user-audit'),  color: '#0369a1', bg: '#e0f2fe' },
+} %}
+{% set statusInfo = statusMap[element.eventType] ?? { label: element.eventType, color: '#7c3aed', bg: '#ede9fe' } %}
+
+{% set parsedMetadata = null %}
+{% if element.metadata %}
+  {% set parsedMetadata = element.metadata|json_decode %}
+{% endif %}
+
+{% block content %}
+
+<div class="ua-log-detail">
+
+  {% if dateDeleted %}
+    <div class="ua-log-trashbar">
+      {{ 'This entry has been soft-deleted (rotated by retention).'|t('user-audit') }}
+      <strong>{{ dateDeleted|date('Y-m-d H:i:s') }}</strong>
+    </div>
+  {% endif %}
+
+  <div class="ua-log-header">
+    <span class="ua-log-status"
+          style="background: {{ statusInfo.bg }}; color: {{ statusInfo.color }};">
+      {{ statusInfo.label }}
+    </span>
+    <code class="ua-log-event">{{ element.eventType }}</code>
+    <span class="ua-log-time">
+      {{ element.auditDateCreated|date('Y-m-d H:i:s') }}
+    </span>
+  </div>
+
+  <div class="ua-log-grid">
+
+    {# ---- Identity ---- #}
+    <section class="ua-log-card">
+      <h2>{{ 'User'|t('user-audit') }}</h2>
+      <dl>
+        <dt>{{ 'User ID'|t('user-audit') }}</dt>
+        <dd>
+          {% if element.auditUserId %}
+            <a href="{{ cpUrl('user-audit/user/' ~ element.auditUserId) }}">
+              {{ element.auditUserId }}
+            </a>
+          {% else %}
+            <span class="light">—</span>
+          {% endif %}
+        </dd>
+
+        <dt>{{ 'Email / Login'|t('user-audit') }}</dt>
+        <dd>
+          {% if element.email %}
+            {% if element.auditUserId %}
+              <a href="{{ cpUrl('user-audit/user/' ~ element.auditUserId) }}">
+                {{ element.email }}
+              </a>
+            {% else %}
+              {{ element.email }}
+            {% endif %}
+          {% else %}
+            <span class="light">—</span>
+          {% endif %}
+        </dd>
+
+        <dt>{{ 'Groups'|t('user-audit') }}</dt>
+        <dd>
+          {% if element.userGroups %}
+            {% for g in element.userGroups|split(',') %}
+              <span class="ua-log-tag ua-log-tag-group">{{ g }}</span>
+            {% endfor %}
+          {% else %}
+            <span class="light">—</span>
+          {% endif %}
+        </dd>
+      </dl>
+    </section>
+
+    {# ---- Context / Client ---- #}
+    <section class="ua-log-card">
+      <h2>{{ 'Context'|t('user-audit') }}</h2>
+      <dl>
+        <dt>{{ 'Context'|t('user-audit') }}</dt>
+        <dd>
+          {% if element.context == 'cp' %}
+            <span class="ua-log-tag" style="background: #e0e4ff;">CP</span>
+          {% elseif element.context == 'fe' %}
+            <span class="ua-log-tag" style="background: #e0ffe4;">FE</span>
+          {% else %}
+            <span class="light">—</span>
+          {% endif %}
+        </dd>
+
+        <dt>{{ 'Client'|t('user-audit') }}</dt>
+        <dd>
+          {% if element.client == 'pwa' %}
+            <span class="ua-log-tag" style="background: #ffe8cc;">PWA</span>
+          {% elseif element.client == 'browser' %}
+            <span class="ua-log-tag" style="background: #f0f0f0;">{{ 'Browser'|t('user-audit') }}</span>
+          {% else %}
+            <span class="light">—</span>
+          {% endif %}
+        </dd>
+
+        {% if element.failureReason %}
+          <dt>{{ 'Reason'|t('user-audit') }}</dt>
+          <dd><code>{{ element.failureReason }}</code></dd>
+        {% endif %}
+      </dl>
+    </section>
+
+    {# ---- Network ---- #}
+    <section class="ua-log-card">
+      <h2>{{ 'Network'|t('user-audit') }}</h2>
+      <dl>
+        <dt>{{ 'IP'|t('user-audit') }}</dt>
+        <dd>{{ element.ipAddress ?: '—' }}</dd>
+      </dl>
+    </section>
+
+    {# ---- User agent ---- #}
+    <section class="ua-log-card">
+      <h2>{{ 'User agent'|t('user-audit') }}</h2>
+      <dl>
+        <dt>{{ 'Device'|t('user-audit') }}</dt>
+        <dd>{{ element.deviceType ?: '—' }}</dd>
+
+        <dt>{{ 'OS'|t('user-audit') }}</dt>
+        <dd>{{ element.osName ?: '—' }}{% if element.osVersion %} {{ element.osVersion }}{% endif %}</dd>
+
+        <dt>{{ 'Browser'|t('user-audit') }}</dt>
+        <dd>{{ element.browserName ?: '—' }}{% if element.browserVersion %} {{ element.browserVersion }}{% endif %}</dd>
+
+        {% if element.userAgent %}
+          <dt>{{ 'Raw UA'|t('user-audit') }}</dt>
+          <dd><code class="ua-log-raw">{{ element.userAgent }}</code></dd>
+        {% endif %}
+      </dl>
+    </section>
+
+    {# ---- Metadata (custom-event payload) ---- #}
+    {% if parsedMetadata %}
+      <section class="ua-log-card ua-log-card-wide">
+        <h2>{{ 'Metadata'|t('user-audit') }}</h2>
+        <pre class="ua-log-meta">{{ parsedMetadata|json_encode(constant('JSON_PRETTY_PRINT') b-or constant('JSON_UNESCAPED_UNICODE') b-or constant('JSON_UNESCAPED_SLASHES')) }}</pre>
+      </section>
+    {% endif %}
+
+  </div>
+
+  <div class="ua-log-actions">
+    <a href="{{ cpUrl('user-audit/logs') }}" class="btn">
+      &larr; {{ 'Back to logs'|t('user-audit') }}
+    </a>
+    {% if element.auditUserId %}
+      <a href="{{ cpUrl('user-audit/user/' ~ element.auditUserId) }}" class="btn submit">
+        {{ 'Show user trace'|t('user-audit') }}
+      </a>
+    {% endif %}
+  </div>
+
+</div>
+
+{% css %}
+.ua-log-detail { max-width: 1100px; }
+
+.ua-log-trashbar {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 4px;
+  color: #78350f;
+}
+
+.ua-log-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+.ua-log-status {
+  padding: 0.25rem 0.65rem;
+  border-radius: 3px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.ua-log-event {
+  font-size: 0.95rem;
+  color: #475569;
+}
+.ua-log-time {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
+}
+
+.ua-log-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.ua-log-card-wide { grid-column: 1 / -1; }
+
+.ua-log-card {
+  padding: 1rem 1.25rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+}
+.ua-log-card h2 {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+.ua-log-card dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.4rem 1rem;
+  margin: 0;
+}
+.ua-log-card dt {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+.ua-log-card dd {
+  margin: 0;
+  font-size: 0.9rem;
+  word-break: break-word;
+}
+
+.ua-log-tag {
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  margin-right: 0.15rem;
+}
+.ua-log-tag-group { background: #eef; }
+
+.ua-log-raw {
+  display: inline-block;
+  font-size: 0.75rem;
+  background: #f8fafc;
+  padding: 0.4rem 0.6rem;
+  border-radius: 3px;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+.ua-log-meta {
+  font-size: 0.8rem;
+  background: #f8fafc;
+  padding: 0.75rem;
+  border-radius: 3px;
+  overflow-x: auto;
+}
+
+.ua-log-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+{% endcss %}
+
+{% endblock %}

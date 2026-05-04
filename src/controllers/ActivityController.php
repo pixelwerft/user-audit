@@ -4,10 +4,12 @@ namespace pixelwerft\useraudit\controllers;
 
 use Craft;
 use craft\web\Controller;
+use pixelwerft\useraudit\elements\AuditLog;
 use pixelwerft\useraudit\records\UserActivityLog;
 use pixelwerft\useraudit\services\ActivityLogService;
 use pixelwerft\useraudit\UserAudit;
 use yii\web\ForbiddenHttpException;
+use yii\web\NotFoundHttpException;
 use yii\web\Response;
 
 /**
@@ -63,48 +65,63 @@ class ActivityController extends Controller
         return true;
     }
 
+    /**
+     * v2.0: thin wrapper around Crafts standard element index.
+     *
+     * The heavy lifting — sources, sortable headers, status pills,
+     * native search, ajax pagination — lives in the AuditLog element
+     * and the elementindex layout template. The controller only sets
+     * the page chrome (title, subnav highlight, settings link).
+     */
     public function actionIndex(): Response
     {
-        $request = Craft::$app->getRequest();
-        $page = max(1, (int)$request->getQueryParam('page', 1));
-        // 50/page matches Craft's standard element-index default and
-        // shaves ~halve the row-render time without losing useful
-        // density. Bumped down from 100 in v1.3.2 — at 100 the Twig
-        // render of 11 columns × per-row macros became the dominant
-        // cost on the page.
-        $perPage = 50;
-        $eventType = (string)$request->getQueryParam('event', '');
-        $context = (string)$request->getQueryParam('context', '');
-        $client = (string)$request->getQueryParam('client', '');
-        $q = trim((string)$request->getQueryParam('q', ''));
-        $sort = (string)$request->getQueryParam('sort', 'dateCreated');
-        $dir = strtolower((string)$request->getQueryParam('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
-
-        // Live filter: only apply the search string from 2 characters
-        // onwards, so individual keystrokes don't immediately trigger
-        // a full table scan. 0 chars = no filter, 1 char = ignored.
-        $effectiveQ = mb_strlen($q) >= 2 ? $q : '';
-
-        $query = $this->buildQuery($eventType, $effectiveQ, $context, $client, $sort, $dir);
-
-        $total = (int)$query->count();
-        $rows = $query
-            ->offset(($page - 1) * $perPage)
-            ->limit($perPage)
-            ->all();
-
         return $this->renderTemplate('user-audit/index', [
-            'rows' => $rows,
-            'total' => $total,
-            'page' => $page,
-            'perPage' => $perPage,
-            'pageCount' => max(1, (int)ceil($total / $perPage)),
-            'eventType' => $eventType,
-            'context' => $context,
-            'client' => $client,
-            'q' => $q,
-            'sort' => $sort,
-            'dir' => $dir,
+            'title' => Craft::t('user-audit', 'User audit logs'),
+            'elementType' => AuditLog::class,
+            'selectedSubnavItem' => 'logs',
+        ]);
+    }
+
+    /**
+     * v2.0: read-only detail view for a single audit row.
+     *
+     * Reached by clicking the title in the element index (via
+     * AuditLog::getCpEditUrl()). Renders the full row — including
+     * the parsed UA, raw UA string and JSON metadata — plus a button
+     * to the user-trace dashboard for the row's user, when set.
+     */
+    public function actionLog(int $elementId): Response
+    {
+        $element = AuditLog::find()
+            ->id($elementId)
+            ->status(null)
+            ->trashed(null)
+            ->one();
+
+        if ($element === null) {
+            throw new NotFoundHttpException(
+                Craft::t('user-audit', 'Audit log entry not found.')
+            );
+        }
+
+        // Pull dateDeleted off the elements row so the detail page
+        // can show "Soft-deleted on …" — Craft already loaded it as
+        // part of the element instance's trashed-state, but having
+        // the explicit timestamp at hand is friendlier in the view.
+        $dateDeleted = null;
+        $row = (new \yii\db\Query())
+            ->select(['dateDeleted'])
+            ->from('{{%elements}}')
+            ->where(['id' => $elementId])
+            ->one();
+        if ($row && !empty($row['dateDeleted'])) {
+            $dateDeleted = $row['dateDeleted'];
+        }
+
+        return $this->renderTemplate('user-audit/log', [
+            'title' => Craft::t('user-audit', 'Audit log entry'),
+            'element' => $element,
+            'dateDeleted' => $dateDeleted,
         ]);
     }
 
@@ -814,6 +831,16 @@ class ActivityController extends Controller
 
         $query = $this->buildQuery($eventType, $effectiveQ, $context, $client);
 
+        // v2.0: pick up elements.dateDeleted for the new `deleted_at`
+        // CSV column. Soft-deleted rows stay in the export so that
+        // compliance audits see the rotation timestamp; hard-deleted
+        // rows are gone from both tables and naturally absent.
+        $query->leftJoin(
+            '{{%elements}} elements',
+            '[[elements.id]] = [[' . UserActivityLog::tableName() . '.elementId]]'
+        );
+        $query->addSelect(['elements.dateDeleted AS elementDateDeleted']);
+
         $filename = sprintf(
             'user-audit-%s.csv',
             (new \DateTime())->format('Ymd-His')
@@ -847,9 +874,17 @@ class ActivityController extends Controller
                 'dateCreated', 'eventType', 'context', 'client', 'userId', 'email',
                 'userGroups', 'ipAddress', 'deviceType', 'osName', 'osVersion',
                 'browserName', 'browserVersion', 'failureReason', 'userAgent',
+                // v2.0: timestamp of soft-delete (empty for live rows).
+                // Hard-deleted rows are not exportable — they are
+                // physically gone from both tables.
+                'deleted_at',
             ]);
             foreach ($query->each(500) as $row) {
                 /** @var UserActivityLog $row */
+                // elementDateDeleted came in as an aliased column on
+                // the underlying SELECT — Yii surfaces it on AR
+                // instances as a public-readable property.
+                $deletedAt = $row->elementDateDeleted ?? '';
                 yield $toCsv([
                     $row->dateCreated,
                     $row->eventType,
@@ -866,6 +901,7 @@ class ActivityController extends Controller
                     $row->browserVersion,
                     $row->failureReason,
                     $row->userAgent,
+                    $deletedAt,
                 ]);
             }
         };
