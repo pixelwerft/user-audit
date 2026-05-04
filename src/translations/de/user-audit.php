@@ -140,10 +140,7 @@ return [
     'Frontend' => 'Frontend',
     'Browser' => 'Browser',
     'Groups' => 'Gruppen',
-    'Filter' => 'Filtern',
     'Reset' => 'Zurücksetzen',
-    'Export CSV' => 'CSV exportieren',
-    'Search by email / group / IP / browser / OS / device / event' => 'Suche nach Email / Gruppe / IP / Browser / OS / Gerät / Event',
     'Time' => 'Zeit',
     'User' => 'Benutzer',
     'Email / Login' => 'E-Mail / Login',
@@ -157,4 +154,37 @@ return [
     'Page %s of %s' => 'Seite %s von %s',
     '%s entries' => '%s Einträge',
     'Settings' => 'Einstellungen',
+
+    // ─── v2.0: Element index + detail ──────────────────────────────────
+    'Audit log' => 'Audit-Log-Eintrag',
+    'audit log' => 'Audit-Log-Eintrag',
+    'Audit logs' => 'Audit-Log-Einträge',
+    'audit logs' => 'Audit-Log-Einträge',
+    'Audit log entry' => 'Audit-Log-Eintrag',
+    'Audit log entry not found.' => 'Audit-Log-Eintrag nicht gefunden.',
+    // Status pills
+    'Login' => 'Login',
+    'Logout' => 'Logout',
+    'Expired' => 'Abgelaufen',
+    'Other' => 'Andere',
+    // Source-sidebar headings + items
+    'Archive' => 'Archiv',
+    'By context' => 'Nach Kontext',
+    'By event' => 'Nach Ereignis',
+    'CP / Backend' => 'CP / Backend',
+    'Failed logins' => 'Fehlgeschlagene Logins',
+    'Blocked logins' => 'Blockierte Logins',
+    'Session expired' => 'Session abgelaufen',
+    'Soft-deleted' => 'Soft-deleted',
+    // Sort options
+    'Email' => 'E-Mail',
+    // Detail page sections + actions
+    'Network' => 'Netzwerk',
+    'User agent' => 'User-Agent',
+    'Raw UA' => 'Rohe UA',
+    'Metadata' => 'Metadaten',
+    'User ID' => 'Benutzer-ID',
+    'Back to logs' => 'Zurück zu den Logs',
+    'Show user trace' => 'User-Trace anzeigen',
+    'This entry has been soft-deleted (rotated by retention).' => 'Dieser Eintrag wurde soft-deleted (durch Retention rotiert).',
 ];
