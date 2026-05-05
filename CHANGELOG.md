@@ -3,6 +3,23 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2.0.1 - 2026-05-05
+
+### Fixed
+- v2.0 conversion migration crashed with
+  `UnknownMethodException: ...::stdout()` when run from the CP web
+  updater. `stdout()` is a `craft\console\Controller` method, not a
+  `craft\db\Migration` method — the CLI runner injects one at
+  runtime but the web updater
+  (`UpdaterController::actionMigrate`) does not. Replaced with a
+  local `note()` helper that uses plain `echo` (captured by both
+  runners) and mirrors to `Craft::info()` for persistent log.
+- The crash happened before any audit row was backfilled, so the
+  schema half (elementId column + unique index + FK) was applied
+  but no element rows were created. v2.0.1 re-running the same
+  migration is idempotent — it skips the schema-add steps and
+  proceeds straight to the backfill.
+
 ## 2.0.0 - 2026-05-05
 
 ### Breaking
