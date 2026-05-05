@@ -3,6 +3,25 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2.1.2 - 2026-05-05
+
+### Fixed
+- Logs index threw `Integrity constraint violation 1052: Column
+  'dateCreated' in order clause is ambiguous` because the v2.1.0
+  LEFT JOIN onto `{{%elements}}` introduced a second `dateCreated`
+  into scope and the controller's ORDER BY used the unqualified
+  column. `buildQuery()` now qualifies every WHERE / ORDER BY
+  reference with the resolved audit-table name.
+- Logs index also returned a row containing only `elementDateDeleted`
+  (and nothing else) because `addSelect()` on a Yii AR query with
+  `select === null` *replaces* the implicit `SELECT *` instead of
+  appending to it. Both `actionIndex` and `actionExport` now use an
+  explicit `select()` that includes `<audit_table>.*` plus the
+  aliased `elementDateDeleted`.
+- Declared `UserActivityLog::$elementDateDeleted` as a public
+  property so AR's `populateRecord()` accepts the aliased column
+  via `canSetProperty()`.
+
 ## 2.1.1 - 2026-05-05
 
 ### Fixed
