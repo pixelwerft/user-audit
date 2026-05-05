@@ -3,6 +3,17 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2.1.1 - 2026-05-05
+
+### Fixed
+- Logs index threw `SQLSTATE[42000] 1064 syntax error` because the
+  v2.1.0 elements LEFT JOIN nested `{{%user_activity_log}}` inside a
+  `[[…]]` quoting block. Yiis quoter unwraps `[[col]]` and
+  `{{%table}}` separately and refuses to nest them, so the literal
+  `[[`user_activity_log`.elementId]]` string ended up in the SQL.
+  Resolves the table name with `getRawTableName()` first and embeds
+  the raw name. Same fix applied to `actionExport`.
+
 ## 2.1.0 - 2026-05-05
 
 ### Changed
