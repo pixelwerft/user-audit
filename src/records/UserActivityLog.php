@@ -28,6 +28,16 @@ use craft\db\ActiveRecord;
  */
 class UserActivityLog extends ActiveRecord
 {
+    /**
+     * v2.1+: when `actionIndex` / `actionExport` LEFT JOIN
+     * {{%elements}}, the `dateDeleted` column is aliased to
+     * `elementDateDeleted` and surfaces here. Declared as a public
+     * property so Yii AR's `populateRecord()` accepts it via
+     * `canSetProperty()`. Stays NULL for queries that do not join
+     * the elements table.
+     */
+    public ?string $elementDateDeleted = null;
+
     public static function tableName(): string
     {
         return '{{%user_activity_log}}';

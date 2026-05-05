@@ -103,18 +103,26 @@ class ActivityController extends Controller
         // dateDeleted onto the row (for the "Archive" badge in the
         // table) and exclude trashed rows from the default view.
         //
-        // Important: the second `[[...]]` block must contain a raw
-        // table reference (e.g. `user_activity_log.elementId`), not
-        // the `{{%...}}` form. Yii's quoter unwraps `[[col]]` and
-        // `{{%table}}` separately and refuses to nest them, which
-        // would leave the literal `[[`user_activity_log`.elementId]]`
-        // string in the SQL and trigger a syntax error.
+        // Notes for posterity (v2.1.x learned the hard way):
+        //   1. The second `[[...]]` block must contain a raw table
+        //      reference, not the `{{%…}}` form. Yiis quoter does
+        //      not nest the two — the `{{%…}}` part stays literal
+        //      and breaks the SQL.
+        //   2. `addSelect()` on an AR query with `select === null`
+        //      *replaces* the implicit `SELECT *` instead of
+        //      appending. Use an explicit `select()` here so the
+        //      audit columns are still part of the result row.
+        //   3. `dateCreated` exists on both tables, so any ORDER BY
+        //      on it must be qualified — handled inside buildQuery().
         $rawTable = Craft::$app->getDb()->getSchema()->getRawTableName('{{%user_activity_log}}');
         $query->leftJoin(
             '{{%elements}} elements',
             "[[elements.id]] = [[{$rawTable}.elementId]]"
         );
-        $query->addSelect(['elementDateDeleted' => '[[elements.dateDeleted]]']);
+        $query->select([
+            "{$rawTable}.*",
+            'elementDateDeleted' => '[[elements.dateDeleted]]',
+        ]);
         if (!$includeArchive) {
             $query->andWhere(['elements.dateDeleted' => null]);
         }
@@ -896,14 +904,17 @@ class ActivityController extends Controller
         // CSV column. Soft-deleted rows stay in the export so that
         // compliance audits see the rotation timestamp; hard-deleted
         // rows are gone from both tables and naturally absent.
-        // Same `[[…]]` / `{{%…}}` non-nesting rule as actionIndex —
-        // resolve the table name explicitly first.
+        // Same `[[…]]` / `{{%…}}` and addSelect-vs-select pitfalls
+        // as in actionIndex — see the comment block there.
         $rawTable = Craft::$app->getDb()->getSchema()->getRawTableName('{{%user_activity_log}}');
         $query->leftJoin(
             '{{%elements}} elements',
             "[[elements.id]] = [[{$rawTable}.elementId]]"
         );
-        $query->addSelect(['elementDateDeleted' => '[[elements.dateDeleted]]']);
+        $query->select([
+            "{$rawTable}.*",
+            'elementDateDeleted' => '[[elements.dateDeleted]]',
+        ]);
 
         $filename = sprintf(
             'user-audit-%s.csv',
@@ -1002,23 +1013,31 @@ class ActivityController extends Controller
         }
         $sortDir = strtolower($dir) === 'asc' ? SORT_ASC : SORT_DESC;
 
+        // v2.1.2: qualify every column reference with the audit table
+        // alias. Callers in v2.1+ LEFT JOIN {{%elements}} for the
+        // "include archive" toggle, and `dateCreated` exists on both
+        // tables — without qualification MySQL throws ambiguous-column
+        // (1052). Qualifying every reference is also future-proof for
+        // any further joins.
+        $rawTable = Craft::$app->getDb()->getSchema()->getRawTableName('{{%user_activity_log}}');
+
         // Always fall back to dateCreated DESC as a secondary sort so
         // rows with identical values in the primary column stay in
         // chronological order (and pagination stays deterministic).
         $orderBy = $sort === 'dateCreated'
-            ? ['dateCreated' => $sortDir]
-            : [$sort => $sortDir, 'dateCreated' => SORT_DESC];
+            ? ["{$rawTable}.dateCreated" => $sortDir]
+            : ["{$rawTable}.{$sort}" => $sortDir, "{$rawTable}.dateCreated" => SORT_DESC];
 
         $query = UserActivityLog::find()->orderBy($orderBy);
 
         if ($eventType !== '') {
-            $query->andWhere(['eventType' => $eventType]);
+            $query->andWhere(["{$rawTable}.eventType" => $eventType]);
         }
         if ($context !== '') {
-            $query->andWhere(['context' => $context]);
+            $query->andWhere(["{$rawTable}.context" => $context]);
         }
         if ($client !== '') {
-            $query->andWhere(['client' => $client]);
+            $query->andWhere(["{$rawTable}.client" => $client]);
         }
         if ($q !== '') {
             // LIKE across all "narrow" textual fields. userAgent is
@@ -1028,17 +1047,17 @@ class ActivityController extends Controller
             // of UA searches; for the rest there's the CSV export.
             $query->andWhere([
                 'or',
-                ['like', 'email', $q],
-                ['like', 'userGroups', $q],
-                ['like', 'ipAddress', $q],
-                ['like', 'browserName', $q],
-                ['like', 'browserVersion', $q],
-                ['like', 'osName', $q],
-                ['like', 'osVersion', $q],
-                ['like', 'deviceType', $q],
-                ['like', 'failureReason', $q],
-                ['like', 'eventType', $q],
-                ['like', 'client', $q],
+                ['like', "{$rawTable}.email", $q],
+                ['like', "{$rawTable}.userGroups", $q],
+                ['like', "{$rawTable}.ipAddress", $q],
+                ['like', "{$rawTable}.browserName", $q],
+                ['like', "{$rawTable}.browserVersion", $q],
+                ['like', "{$rawTable}.osName", $q],
+                ['like', "{$rawTable}.osVersion", $q],
+                ['like', "{$rawTable}.deviceType", $q],
+                ['like', "{$rawTable}.failureReason", $q],
+                ['like', "{$rawTable}.eventType", $q],
+                ['like', "{$rawTable}.client", $q],
             ]);
         }
 
