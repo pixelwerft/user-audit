@@ -102,11 +102,19 @@ class ActivityController extends Controller
         // Soft-delete filter: LEFT JOIN elements so we can read
         // dateDeleted onto the row (for the "Archive" badge in the
         // table) and exclude trashed rows from the default view.
+        //
+        // Important: the second `[[...]]` block must contain a raw
+        // table reference (e.g. `user_activity_log.elementId`), not
+        // the `{{%...}}` form. Yii's quoter unwraps `[[col]]` and
+        // `{{%table}}` separately and refuses to nest them, which
+        // would leave the literal `[[`user_activity_log`.elementId]]`
+        // string in the SQL and trigger a syntax error.
+        $rawTable = Craft::$app->getDb()->getSchema()->getRawTableName('{{%user_activity_log}}');
         $query->leftJoin(
             '{{%elements}} elements',
-            '[[elements.id]] = [[' . UserActivityLog::tableName() . '.elementId]]'
+            "[[elements.id]] = [[{$rawTable}.elementId]]"
         );
-        $query->addSelect(['elements.dateDeleted AS elementDateDeleted']);
+        $query->addSelect(['elementDateDeleted' => '[[elements.dateDeleted]]']);
         if (!$includeArchive) {
             $query->andWhere(['elements.dateDeleted' => null]);
         }
@@ -888,11 +896,14 @@ class ActivityController extends Controller
         // CSV column. Soft-deleted rows stay in the export so that
         // compliance audits see the rotation timestamp; hard-deleted
         // rows are gone from both tables and naturally absent.
+        // Same `[[…]]` / `{{%…}}` non-nesting rule as actionIndex —
+        // resolve the table name explicitly first.
+        $rawTable = Craft::$app->getDb()->getSchema()->getRawTableName('{{%user_activity_log}}');
         $query->leftJoin(
             '{{%elements}} elements',
-            '[[elements.id]] = [[' . UserActivityLog::tableName() . '.elementId]]'
+            "[[elements.id]] = [[{$rawTable}.elementId]]"
         );
-        $query->addSelect(['elements.dateDeleted AS elementDateDeleted']);
+        $query->addSelect(['elementDateDeleted' => '[[elements.dateDeleted]]']);
 
         $filename = sprintf(
             'user-audit-%s.csv',
