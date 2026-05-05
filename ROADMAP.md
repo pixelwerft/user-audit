@@ -21,6 +21,18 @@ Aktuell keine konkreten Major-Themen geplant. Wenn ein klarer architektureller S
 
 ## Erledigt
 
+### v2.1.0 — 2026-05-05
+
+- UI-Walk-Back vom Element-Index-Stil zurück auf v1.x-Filter-Bar oben + Single-Table-Queries — Element-Layer bleibt strukturell drin, nur die Listen-UI wurde getauscht
+- Status-Pills aus v2.0 als neue Spalte in der Tabelle übernommen
+- Click-through von Time-Spalte auf neue Detail-Seite (`/admin/user-audit/log/<elementId>`)
+- Neuer "Include archive"-Filter zeigt soft-deleted Rows zusätzlich, mit "Rotated"-Badge
+- Such-Index für AuditLog-Elemente abgeschaltet, um Logging-Schreiblast zu reduzieren
+
+### v2.0.1 — 2026-05-05
+
+- Hotfix: `stdout()` aus der Conversion-Migration entfernt — schlug im CP-Web-Updater fehl, weil Migrations nicht von Console-Controller erben
+
 ### v2.0.0 — 2026-05-05
 
 - Logs-Index als nativer Craft-Element-Index (Status-Pills, Source-Sidebar, Sort/Search/Pagination, Spalten-Picker)

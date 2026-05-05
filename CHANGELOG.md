@@ -3,6 +3,41 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2.1.0 - 2026-05-05
+
+### Changed
+- Walked back the v2.0 element-index UX. The CP logs page at
+  `/admin/user-audit` is back to a hand-rolled filter bar at the top
+  + single-table query + custom table, like v1.x — but with the
+  status-pill column ported over from v2.0 (login=green,
+  logout=gray, login_failed=orange, login_blocked=red,
+  session_expired=blue, custom=fuchsia) and the time column made
+  click-through to the read-only detail view at
+  `/admin/user-audit/log/<elementId>`. The element-index source
+  sidebar on the left is gone.
+- Filter bar gained an *Include archive* checkbox. Off by default —
+  rotated (soft-deleted) entries are hidden so the live activity
+  stays the focus. On → trashed rows show in the list with a
+  *Rotated* badge next to the timestamp and a dimmed row.
+- AuditLog elements are no longer indexed by Crafts search engine
+  (`defineSearchableAttributes()` returns an empty array).
+  ActivityLogService writes are no longer slowed down by a
+  search-index job per row.
+
+### Why the walk-back
+The v2.0 element-index needed two joins on `user_activity_log` plus
+left-joins on `elements` and `elements_sites` per page load, which
+became the dominant cost on large audit tables (5+ table scans
+where v1.3.2 had one). The custom filter form covers the same
+filtering need with single-table queries and stays snappy at 100k+
+rows. The element layer underneath stays intact — element rows,
+elementId FK, Craft-Trash soft-delete, hard-purge console command
+and CSV `deleted_at` column are unchanged from v2.0.
+
+### Notes
+- No data migration is required. v2.0 → v2.1 is purely a UI swap
+  on top of the same schema.
+
 ## 2.0.1 - 2026-05-05
 
 ### Fixed
