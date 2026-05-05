@@ -8,6 +8,14 @@ use craft\helpers\StringHelper;
 use pixelwerft\useraudit\elements\AuditLog;
 use yii\db\Query;
 
+// NOTE: do not call $this->stdout() in this file. Migrations extend
+// craft\db\Migration which inherits from yii\db\Component — that does
+// not have a stdout() method. The CLI runner injects one at runtime,
+// but the CP web updater (UpdaterController::actionMigrate) does not,
+// so the migration crashes for any user updating from the dashboard.
+// Use the local note() helper below instead — it echoes (captured by
+// both runners) and mirrors to Craft::info() for persistent logs.
+
 /**
  * v2.0 — Convert {{%user_activity_log}} into Craft Elements.
  *
@@ -142,11 +150,11 @@ class m260505_120000_audit_log_to_elements extends Migration
             ->count('*', $this->db);
 
         if ($totalToDo === 0) {
-            $this->stdout("[user-audit] no audit rows to backfill.\n");
+            $this->note("[user-audit] no audit rows to backfill.\n");
             return;
         }
 
-        $this->stdout("[user-audit] backfilling {$totalToDo} audit rows into Craft elements (batch size " . self::BATCH_SIZE . ")...\n");
+        $this->note("[user-audit] backfilling {$totalToDo} audit rows into Craft elements (batch size " . self::BATCH_SIZE . ")...\n");
 
         $done = 0;
         while (true) {
@@ -210,10 +218,22 @@ class m260505_120000_audit_log_to_elements extends Migration
             }
 
             $done += count($rows);
-            $this->stdout("[user-audit]   progress: {$done} / {$totalToDo}\n");
+            $this->note("[user-audit]   progress: {$done} / {$totalToDo}\n");
         }
 
-        $this->stdout("[user-audit] backfill complete.\n");
+        $this->note("[user-audit] backfill complete.\n");
+    }
+
+    /**
+     * Local progress-output helper that works in both runners (CP web
+     * updater + CLI `migrate/up`). Plain echo is captured by both
+     * contexts; mirroring to Craft::info() preserves the trail in
+     * the storage logs even when the runner swallows stdout.
+     */
+    private function note(string $message): void
+    {
+        echo $message;
+        Craft::info(rtrim($message), __CLASS__);
     }
 
     // ------------------------------------------------------------------
