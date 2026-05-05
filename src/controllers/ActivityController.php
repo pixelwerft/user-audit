@@ -66,19 +66,72 @@ class ActivityController extends Controller
     }
 
     /**
-     * v2.0: thin wrapper around Crafts standard element index.
+     * v2.1: walked back from the v2.0 element-index UX. The custom
+     * filter bar at the top + single-table query keeps the page snappy
+     * even on big audit tables (Crafts element-index does multiple
+     * joins on `elements`, `elements_sites` and `user_activity_log`
+     * per request, which becomes the dominant cost at 100k+ rows).
      *
-     * The heavy lifting — sources, sortable headers, status pills,
-     * native search, ajax pagination — lives in the AuditLog element
-     * and the elementindex layout template. The controller only sets
-     * the page chrome (title, subnav highlight, settings link).
+     * The element layer underneath (AuditLog element, elementId FK,
+     * Craft-Trash soft-delete, hard-purge console command, CSV
+     * `deleted_at`) stays in place — only the list UI is back to
+     * v1.x style with the v2.0 status-pill column added.
      */
     public function actionIndex(): Response
     {
+        $request = Craft::$app->getRequest();
+        $page = max(1, (int)$request->getQueryParam('page', 1));
+        $perPage = 50;
+        $eventType = (string)$request->getQueryParam('event', '');
+        $context = (string)$request->getQueryParam('context', '');
+        $client = (string)$request->getQueryParam('client', '');
+        $q = trim((string)$request->getQueryParam('q', ''));
+        $sort = (string)$request->getQueryParam('sort', 'dateCreated');
+        $dir = strtolower((string)$request->getQueryParam('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+        // v2.1: opt-in checkbox to include soft-deleted (rotated)
+        // rows. Off by default so the index focuses on live activity.
+        $includeArchive = (string)$request->getQueryParam('archive', '') === '1';
+
+        // Live filter: only apply the search string from 2 characters
+        // onwards, so individual keystrokes don't immediately trigger
+        // a full table scan.
+        $effectiveQ = mb_strlen($q) >= 2 ? $q : '';
+
+        $query = $this->buildQuery($eventType, $effectiveQ, $context, $client, $sort, $dir);
+
+        // Soft-delete filter: LEFT JOIN elements so we can read
+        // dateDeleted onto the row (for the "Archive" badge in the
+        // table) and exclude trashed rows from the default view.
+        $query->leftJoin(
+            '{{%elements}} elements',
+            '[[elements.id]] = [[' . UserActivityLog::tableName() . '.elementId]]'
+        );
+        $query->addSelect(['elements.dateDeleted AS elementDateDeleted']);
+        if (!$includeArchive) {
+            $query->andWhere(['elements.dateDeleted' => null]);
+        }
+
+        $total = (int)$query->count();
+        $rows = $query
+            ->offset(($page - 1) * $perPage)
+            ->limit($perPage)
+            ->all();
+
         return $this->renderTemplate('user-audit/index', [
             'title' => Craft::t('user-audit', 'User audit logs'),
-            'elementType' => AuditLog::class,
             'selectedSubnavItem' => 'logs',
+            'rows' => $rows,
+            'total' => $total,
+            'page' => $page,
+            'perPage' => $perPage,
+            'pageCount' => max(1, (int)ceil($total / $perPage)),
+            'eventType' => $eventType,
+            'context' => $context,
+            'client' => $client,
+            'q' => $q,
+            'sort' => $sort,
+            'dir' => $dir,
+            'includeArchive' => $includeArchive,
         ]);
     }
 

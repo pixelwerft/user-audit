@@ -314,16 +314,18 @@ class AuditLog extends Element
 
     protected static function defineSearchableAttributes(): array
     {
-        return [
-            'email',
-            'userGroups',
-            'ipAddress',
-            'browserName',
-            'osName',
-            'deviceType',
-            'failureReason',
-            'eventType',
-        ];
+        // v2.1: empty by default — the v2.1 list UI uses a hand-rolled
+        // filter form that hits the audit table directly via SQL LIKE,
+        // not Crafts search index. Indexing every audit row would make
+        // each ActivityLogService::log() write fire a search-index
+        // job and pile load onto the DB without giving the UI anything
+        // to read back. If a future v2.x reintroduces the element-index
+        // UI, restore the column list documented below.
+        //
+        //   Suggested set:
+        //   ['email', 'userGroups', 'ipAddress', 'browserName',
+        //    'osName', 'deviceType', 'failureReason', 'eventType']
+        return [];
     }
 
     /**

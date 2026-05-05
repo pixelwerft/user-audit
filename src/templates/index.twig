@@ -1,25 +1,353 @@
-{# v2.0: replaced the hand-rolled filter form + table with Crafts
-   standard element-index layout. The AuditLog element type defines
-   sources, table attributes, sort options, status pills and search;
-   `_layouts/elementindex` renders the entire CP UX (sidebar, sticky
-   header, ajax pagination, column picker) for free. #}
-{% extends '_layouts/elementindex' %}
+{# v2.1: walked back from the v2.0 element-index UX. The hand-rolled
+   filter bar + single-table query keeps the page snappy on big audit
+   tables. Status-pill column was ported over from v2.0 — that was the
+   one element-index visual worth keeping. #}
+{% extends '_layouts/cp' %}
 
 {% set title = 'User audit logs'|t('user-audit') %}
 {% set selectedSubnavItem = 'logs' %}
-{% set elementType = 'pixelwerft\\useraudit\\elements\\AuditLog' %}
 
 {% set crumbs = [
   { label: 'User Audit'|t('user-audit'), url: cpUrl('user-audit/logs') }
 ] %}
 
-{# Sidebar action: jump to plugin settings without leaving the
-   element-index. Standard `<header>` actions live to the right of the
-   page title in this layout. #}
-{% block actionButton %}
-  <a href="{{ cpUrl('settings/plugins/user-audit') }}"
-     class="btn settings icon"
-     title="{{ 'Settings'|t('user-audit') }}">
+{% block content %}
+
+{# Status-pill colours mirror the AuditLog element's `statuses()`. Kept
+   in the template (not the controller) so the visual stays in one
+   place and a designer touching the look does not have to round-trip
+   through PHP. #}
+{% set statusPillMap = {
+  'login':           { label: 'Login'|t('user-audit'),    color: '#16a34a', bg: '#dcfce7' },
+  'logout':          { label: 'Logout'|t('user-audit'),   color: '#475569', bg: '#f1f5f9' },
+  'login_failed':    { label: 'Failed'|t('user-audit'),   color: '#c2410c', bg: '#fff7ed' },
+  'login_blocked':   { label: 'Blocked'|t('user-audit'),  color: '#b91c1c', bg: '#fee2e2' },
+  'session_expired': { label: 'Expired'|t('user-audit'),  color: '#0369a1', bg: '#e0f2fe' },
+} %}
+
+{% set sortableColumns = {
+  dateCreated: 'Time'|t('user-audit'),
+  eventType: 'Event'|t('user-audit'),
+  context: 'Context'|t('user-audit'),
+  client: 'Client'|t('user-audit'),
+  userId: 'User'|t('user-audit'),
+  email: 'Email / Login'|t('user-audit'),
+  userGroups: 'Groups'|t('user-audit'),
+  ipAddress: 'IP'|t('user-audit'),
+  deviceType: 'Device'|t('user-audit'),
+  osName: 'OS'|t('user-audit'),
+  browserName: 'Browser'|t('user-audit'),
+  failureReason: 'Reason'|t('user-audit'),
+} %}
+
+{% macro sortHeader(col, label, currentSort, currentDir, baseQuery) %}
+  {% set isActive = currentSort == col %}
+  {% set nextDir = (isActive and currentDir == 'asc') ? 'desc' : 'asc' %}
+  {% set url = cpUrl('user-audit/logs', baseQuery|merge({ sort: col, dir: nextDir })) %}
+  <a href="{{ url }}" style="color: inherit; text-decoration: none; display: inline-flex; align-items: center; gap: 0.25rem;">
+    <span>{{ label }}</span>
+    {% if isActive %}
+      <span style="font-size: 0.7rem; opacity: 0.7;">{{ currentDir == 'asc' ? '↑' : '↓' }}</span>
+    {% else %}
+      <span style="font-size: 0.7rem; opacity: 0.25;">↕</span>
+    {% endif %}
+  </a>
+{% endmacro %}
+
+<div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center; justify-content: flex-end;">
+  <a href="{{ cpUrl('settings/plugins/user-audit') }}" class="btn settings icon" title="{{ 'Settings'|t('user-audit') }}">
     {{ 'Settings'|t('user-audit') }}
   </a>
+</div>
+
+<div class="field">
+  <form id="user-audit-filter" method="get" action="{{ cpUrl('user-audit/logs') }}">
+    <div class="flex">
+      <div class="flex-grow">
+        <input
+          type="text"
+          name="q"
+          value="{{ q }}"
+          placeholder="{{ 'Search by email / group / IP / browser / OS / device / event'|t('user-audit') }}"
+          class="text fullwidth"
+          data-ua-live-input
+          autocomplete="off"
+        >
+      </div>
+      <div>
+        <div class="select">
+          <select name="event" data-ua-live-select>
+            <option value="">{{ 'All events'|t('user-audit') }}</option>
+            <option value="login" {% if eventType == 'login' %}selected{% endif %}>login</option>
+            <option value="logout" {% if eventType == 'logout' %}selected{% endif %}>logout</option>
+            <option value="login_failed" {% if eventType == 'login_failed' %}selected{% endif %}>login_failed</option>
+            <option value="login_blocked" {% if eventType == 'login_blocked' %}selected{% endif %}>login_blocked</option>
+            <option value="session_expired" {% if eventType == 'session_expired' %}selected{% endif %}>session_expired</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <div class="select">
+          <select name="context" data-ua-live-select>
+            <option value="">{{ 'All contexts'|t('user-audit') }}</option>
+            <option value="cp" {% if context == 'cp' %}selected{% endif %}>{{ 'CP (Backend)'|t('user-audit') }}</option>
+            <option value="fe" {% if context == 'fe' %}selected{% endif %}>{{ 'Frontend'|t('user-audit') }}</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <div class="select">
+          <select name="client" data-ua-live-select>
+            <option value="">{{ 'All clients'|t('user-audit') }}</option>
+            <option value="pwa" {% if client == 'pwa' %}selected{% endif %}>PWA</option>
+            <option value="browser" {% if client == 'browser' %}selected{% endif %}>{{ 'Browser'|t('user-audit') }}</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="ua-archive-toggle" title="{{ 'Include rotated (soft-deleted) entries.'|t('user-audit') }}">
+          <input type="checkbox"
+                 name="archive"
+                 value="1"
+                 {% if includeArchive %}checked{% endif %}
+                 data-ua-live-select>
+          <span>{{ 'Include archive'|t('user-audit') }}</span>
+        </label>
+      </div>
+      <div>
+        <button type="submit" class="btn submit">{{ 'Filter'|t('user-audit') }}</button>
+      </div>
+      {% if q or eventType or context or client or includeArchive %}
+        <div>
+          <a href="{{ cpUrl('user-audit/logs') }}" class="btn">{{ 'Reset'|t('user-audit') }}</a>
+        </div>
+      {% endif %}
+      <div>
+        <a href="{{ cpUrl('user-audit/export', { q: q, event: eventType, context: context, client: client }) }}"
+           class="btn">
+          {{ 'Export CSV'|t('user-audit') }}
+        </a>
+      </div>
+    </div>
+    {# Preserve current sort on form submit so filter changes don't reset the user's chosen column order. #}
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <input type="hidden" name="dir" value="{{ dir }}">
+  </form>
+</div>
+
+{% set sortBaseQuery = { q: q, event: eventType, context: context, client: client, archive: includeArchive ? '1' : null } %}
+
+<div class="ua-table-scroll">
+  <div class="tableview">
+    <table class="data fullwidth">
+      <thead>
+        <tr>
+          {% for col, label in sortableColumns %}
+            <th style="white-space: nowrap; cursor: pointer;">
+              {{ _self.sortHeader(col, label, sort, dir, sortBaseQuery) }}
+            </th>
+          {% endfor %}
+        </tr>
+      </thead>
+    <tbody>
+      {% for row in rows %}
+        {% set isTrashed = row.elementDateDeleted is defined and row.elementDateDeleted %}
+        {% set pill = statusPillMap[row.eventType] ?? { label: row.eventType, color: '#7c3aed', bg: '#ede9fe' } %}
+        <tr {% if isTrashed %}class="ua-row-trashed"{% endif %}>
+          <td>
+            {% if row.elementId %}
+              <a href="{{ cpUrl('user-audit/log/' ~ row.elementId) }}"
+                 class="light"
+                 title="{{ 'Open audit log entry'|t('user-audit') }}"
+                 style="font-variant-numeric: tabular-nums;">
+                {{ row.dateCreated|date('Y-m-d H:i:s') }}
+              </a>
+            {% else %}
+              <span class="light">{{ row.dateCreated|date('Y-m-d H:i:s') }}</span>
+            {% endif %}
+            {% if isTrashed %}
+              <span class="ua-rotated-badge"
+                    title="{{ 'Rotated'|t('user-audit') }}: {{ row.elementDateDeleted }}">
+                {{ 'Rotated'|t('user-audit') }}
+              </span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="ua-status-pill"
+                  style="background: {{ pill.bg }}; color: {{ pill.color }};">
+              {{ pill.label }}
+            </span>
+            <code style="margin-left: 0.4rem; font-size: 0.7rem; color: #64748b;">{{ row.eventType }}</code>
+          </td>
+          <td>
+            {% if row.context == 'cp' %}
+              <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #e0e4ff; font-size: 0.7rem;">CP</span>
+            {% elseif row.context == 'fe' %}
+              <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #e0ffe4; font-size: 0.7rem;">FE</span>
+            {% else %}
+              <span class="light">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if row.client == 'pwa' %}
+              <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #ffe8cc; font-size: 0.7rem;">PWA</span>
+            {% elseif row.client == 'browser' %}
+              <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #f0f0f0; font-size: 0.7rem;">{{ 'Browser'|t('user-audit') }}</span>
+            {% else %}
+              <span class="light">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if row.userId %}
+              <a href="{{ cpUrl('user-audit/user/' ~ row.userId) }}" title="{{ 'Show all activity for this user'|t('user-audit') }}">
+                {{ row.userId }}
+              </a>
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td>
+            {% if row.email and row.userId %}
+              <a href="{{ cpUrl('user-audit/user/' ~ row.userId) }}" title="{{ 'Show all activity for this user'|t('user-audit') }}">
+                {{ row.email }}
+              </a>
+            {% else %}
+              {{ row.email ?: '—' }}
+            {% endif %}
+          </td>
+          <td>
+            {% if row.userGroups %}
+              {% for g in row.userGroups|split(',') %}
+                <span style="padding: 0.1rem 0.4rem; border-radius: 3px; background: #eef; font-size: 0.7rem; margin-right: 0.15rem;">{{ g }}</span>
+              {% endfor %}
+            {% else %}
+              <span class="light">—</span>
+            {% endif %}
+          </td>
+          <td>{{ row.ipAddress ?: '—' }}</td>
+          <td>{{ row.deviceType ?: '—' }}</td>
+          <td>{{ row.osName ?: '—' }}{% if row.osVersion %} {{ row.osVersion }}{% endif %}</td>
+          <td>{{ row.browserName ?: '—' }}{% if row.browserVersion %} {{ row.browserVersion }}{% endif %}</td>
+          <td>{{ row.failureReason ?: '—' }}</td>
+        </tr>
+      {% else %}
+        <tr>
+          <td colspan="12" class="centeralign light">
+            {{ 'No entries yet.'|t('user-audit') }}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if pageCount > 1 %}
+  <nav class="pagination" style="margin-top: 1rem;">
+    {% set baseQuery = { q: q, event: eventType, context: context, client: client, sort: sort, dir: dir, archive: includeArchive ? '1' : null } %}
+    {% if page > 1 %}
+      <a class="btn" href="{{ cpUrl('user-audit/logs', baseQuery|merge({ page: page - 1 })) }}">&larr; {{ 'Previous'|t('user-audit') }}</a>
+    {% endif %}
+    <span class="light" style="margin: 0 0.75rem;">
+      {{ 'Page %s of %s'|t('user-audit')|format(page, pageCount) }} &middot;
+      {{ '%s entries'|t('user-audit')|format(total) }}
+    </span>
+    {% if page < pageCount %}
+      <a class="btn" href="{{ cpUrl('user-audit/logs', baseQuery|merge({ page: page + 1 })) }}">{{ 'Next'|t('user-audit') }} &rarr;</a>
+    {% endif %}
+  </nav>
+{% endif %}
+
+{% css %}
+/* Horizontal scroll wrapper for the logs table — see v1.3.2 notes for
+   the min-width:0 / flex children rationale. */
+.ua-table-scroll {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.content-pane > .ua-table-scroll,
+#main-content .ua-table-scroll {
+  flex: 1 1 0;
+}
+.ua-table-scroll .tableview {
+  overflow: visible;
+  max-width: none;
+}
+.ua-table-scroll table.data,
+.ua-table-scroll table.data.fullwidth {
+  width: auto;
+  min-width: 100%;
+}
+
+/* v2.1: archive checkbox + status pill + rotated badge */
+.ua-archive-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.85rem;
+}
+.ua-archive-toggle input { margin: 0; }
+
+.ua-status-pill {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.ua-rotated-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  background: #fef3c7;
+  color: #78350f;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.ua-row-trashed { opacity: 0.7; }
+{% endcss %}
+
+{% js %}
+(function () {
+  // Live-Filter: select changes submit immediately, text input is
+  // debounced (350ms) and ignores single-character entries. Empty
+  // input still submits so clearing the search re-opens results.
+  var form = document.getElementById('user-audit-filter');
+  if (!form) return;
+
+  var submit = function () {
+    // Drop the page param so a filter change does not land us on
+    // page 42 of a different result set.
+    var pageInput = form.querySelector('input[name="page"]');
+    if (pageInput) pageInput.remove();
+    form.submit();
+  };
+
+  form.querySelectorAll('[data-ua-live-select]').forEach(function (el) {
+    el.addEventListener('change', submit);
+  });
+
+  var t = null;
+  form.querySelectorAll('[data-ua-live-input]').forEach(function (el) {
+    el.addEventListener('input', function () {
+      if (t) clearTimeout(t);
+      var v = el.value.trim();
+      if (v.length === 1) return; // single character is too noisy
+      t = setTimeout(submit, 350);
+    });
+  });
+})();
+{% endjs %}
+
 {% endblock %}
