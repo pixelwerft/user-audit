@@ -3,6 +3,45 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2.2.0 - 2026-06-12
+
+### Added
+- Password change logging. Two new hooks on `craft\elements\User`
+  capture password set/change events:
+  - `EVENT_BEFORE_SAVE` reads the still-plaintext `$user->newPassword`,
+    derives five Boolean classifications (`meetsMin8`, `hasUpper`,
+    `hasLower`, `hasDigit`, `hasSpecial`), an integer `length` and a
+    `score` (0–5), and parks them in a request-local map keyed by
+    user id.
+  - `EVENT_AFTER_SAVE` pops the entry and writes a
+    `password_changed` audit row with the flags in
+    `metadata.passwordStrength`. AFTER_SAVE only fires on successful
+    saves, so failed validations leave no audit trail (and the
+    pending entry is discarded at request end).
+  - Self-changes log `triggeredBy = null`; admin-initiated changes
+    log the actor's user id.
+- New element status `pwd_changed` with violet pill on the index.
+- New source-sidebar entry **Password changes** under "By event".
+- New status-filter option, sortable column, native-search target.
+- Monitor chart picks up `password_changed` automatically as a
+  violet (`#8b5cf6`) line, parallel to the other event-type lines.
+- New plugin setting `recordPasswordChanges` (default on). Disable
+  to skip both hooks entirely — no entries written, no plaintext
+  observed.
+- Detail-view page renders a dedicated *Password strength* card
+  for `password_changed` rows: one tinted box per flag, the
+  integer score, plus the `triggeredBy` actor id if not a
+  self-change. Non-password events keep the existing JSON
+  metadata pre-block.
+
+### Privacy
+- The plaintext password is observed in exactly one place
+  (`ActivityLogService::computePasswordStrengthFlags`) and only
+  long enough to derive the five booleans + length. The string is
+  never stored, copied, hashed (we leave that to Craft), returned,
+  logged or sent off-instance. The pending-changes map and the
+  audit row only hold the derived flags.
+
 ## 2.1.2 - 2026-05-05
 
 ### Fixed

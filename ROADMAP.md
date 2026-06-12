@@ -4,9 +4,23 @@ Strategische, versionsbezogene Sicht. Taktischer Posteingang: [TODO.md](TODO.md)
 Format-Vorgabe: [behavior.md](../../apps/code-with-claude/topics/behavior.md#roadmap-während-der-entwicklung-führen).
 Versionierung: 10–30 Patches pro Increment bündeln (siehe [git.md](../../apps/code-with-claude/topics/git.md#versionierung)).
 
+## v2.3.0 — geplant: optionales Geo-Logging
+
+Opt-in pro Setting + per-User-Consent über ein konfigurierbares Custom-Field-Handle. Vollständige Spec:
+
+- Plugin-Setting `enableGeoLogging` (Default `false` — opt-in)
+- Plugin-Setting `geoConsentFieldHandle` (Default-Vorschlag `userAuditGeoConsent`). Verweist auf eine Lightswitch-Custom-Field auf dem User-Field-Layout, die der Admin selbst anlegt. Setting sagt nur welcher Handle gelesen wird.
+- Logging-Bedingung: geo wird nur gespeichert wenn (a) Setting on AND (b) Header `X-Geo-Lat`/`X-Geo-Lng` oder `$meta['latitude']`/`$meta['longitude']` liefert Werte AND (c) ein User existiert AND (d) sein Consent-Feld ist `true`. Anonyme Events (z.B. `login_failed` ohne Match) → kein geo.
+- Settings-Seite zeigt einen aufklappbaren "Suggested legal copy"-Block mit Copy-Buttons: Vorschlag für die Field-Description auf dem User-Feld, Absatz für die Datenschutzerklärung, Hinweis-Text für die Consent-UI. Read-only Vorlagen — Admin kopiert und passt an.
+- Schema: zwei neue Spalten `latitude DECIMAL(10,7) NULL`, `longitude DECIMAL(10,7) NULL` (portabel MySQL/MariaDB/Postgres, ~1cm-Präzision)
+- Detail-View bekommt eine "Location"-Karte mit Coords + OpenStreetMap-Link (`https://www.openstreetmap.org/?mlat=…&mlon=…`) wenn Werte vorhanden — keine Google-Embeds wegen Privacy
+- CSV-Export: zwei neue Spalten `latitude`, `longitude`
+- Element-Index: nicht standardmässig sichtbar, via Spalten-Picker auswählbar
+- CHANGELOG-Entry stellt klar: Plugin ist Empfänger der bereits abgesegneten Werte; Consent-Handling liegt beim Caller
+
 ## v2.x — laufender Patch-Bündel
 
-Folge-Bündel auf v2.0.0. Aktuell leer; sobald Praxis-Inputs nach v2.0 reinkommen, hier sammeln und nach 10–30 Commits taggen.
+Folge-Bündel zwischen Minor-Releases. Aktuell leer.
 
 Mögliche Kandidaten (nicht zugesagt):
 
@@ -20,6 +34,15 @@ Mögliche Kandidaten (nicht zugesagt):
 Aktuell keine konkreten Major-Themen geplant. Wenn ein klarer architektureller Sprung sichtbar wird, hier eintragen.
 
 ## Erledigt
+
+### v2.2.0 — 2026-06-12
+
+- Password-Change-Logging mit BEFORE_SAVE/AFTER_SAVE-Hooks auf dem User-Element
+- Stärke-Klassifikationen (`meetsMin8`, `hasUpper`, `hasLower`, `hasDigit`, `hasSpecial`, `score 0–5`) in `metadata.passwordStrength`
+- Plaintext-Privacy-Garantie: einmalige Beobachtung in `computePasswordStrengthFlags`, nie gespeichert/kopiert/versendet
+- Neuer Status `pwd_changed` (violet) + Source "Password changes" + Monitor-Linie
+- Settings-Toggle `recordPasswordChanges` (Default on)
+- Detail-View bekommt strukturierte Password-Strength-Karte für `password_changed`-Events
 
 ### v2.1.0 — 2026-05-05
 

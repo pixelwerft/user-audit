@@ -5,11 +5,14 @@ Format-Vorgabe: [behavior.md](../../apps/code-with-claude/topics/behavior.md#inp
 
 ## Offen
 
-- [ ] Bind-Mount im Test-Projekt (`reest-starter/craft/.ddev/docker-compose.user-audit.yaml`) entfernen, sobald v2.1.0 regulär via `composer update` gezogen ist (erfasst 2026-04-29)
-- [ ] In DDEV / Production testen: v2.1.0 Logs-Liste lädt zügig (kein Element-Index-Overhead mehr), Status-Pills korrekt gefärbt, "Include archive"-Checkbox zeigt Trashed-Rows mit Rotated-Badge, Time-Klick öffnet Detail-Seite (erfasst 2026-05-05)
+- [ ] **v2.3.0 — optionales Geo-Logging.** Spec in [ROADMAP.md → v2.3.0](ROADMAP.md). Wartet auf Implementations-Go (erfasst 2026-06-12)
+- [ ] In Production testen: v2.2.0 Hooks feuern bei Passwort-Setzung, Strength-Karte rendert sauber, Self vs. Admin-Triggered korrekt unterschieden, `recordPasswordChanges`-Toggle schaltet beide Hooks weg (erfasst 2026-06-12, post-Push-Verifikation)
+- [ ] Bind-Mount im Test-Projekt **bleibt off**. v2.x-Iteration läuft komplett via Tag-Push-Composer-Update (erfasst 2026-06-12 nach 2. Vorfall)
 
 ## Erledigt
 
+- [x] **v2.2.0 — Password-Change-Logging** mit Stärke-Klassifikationen ohne Plaintext-Persistenz. BEFORE_SAVE captureed, AFTER_SAVE schreibt Audit-Row. Neuer Status `pwd_changed` (violet), Source-Sidebar-Item, Monitor-Linie, Detail-Karte. Settings-Toggle `recordPasswordChanges`. Translation-Parität sauber — erledigt 2026-06-12
+- [x] **Recovery 2. Datenverlust-Vorfall:** Plugin-Repo via `git clone` aus GitHub wiederhergestellt (v2.1.2 als Start), Bind-Mount-Footgun entfernt, ddev-router via `docker restart` healthy gemacht. Bind-Mount bleibt für v2.x-Arbeit off — erledigt 2026-06-12
 - [x] **v2.1.0 — UI-Walk-Back auf v1.x-Filter-Bar mit Status-Pills aus v2.0** — adressiert (a) Slow-Load durch Element-Index-Joins und (b) verlorene Filter-Bar oben. Element-Layer (elementId, Soft-Delete, Hard-Purge, CSV-deleted_at, Detail-Seite) bleibt komplett. Such-Index für AuditLog abgeschaltet — entlastet auch das Logging — erledigt 2026-05-05
 - [x] v2.0.1 Hotfix: `stdout()` aus Migration entfernt (CP-Web-Updater-Inkompatibilität) — erledigt 2026-05-05
 - [x] **v2.0.0 — Logs-Liste als nativer Craft-Element-Index** mit Source-Sidebar (All / By event / By context / Archive), Status-Pills aus Event-Type, sortierbaren Standard-Spalten, nativer Search/Pagination, Read-only Detail-View bei Title-Klick. Soft-Delete-Semantik für `purge/run`, neuer expliziter Hard-Delete-Trigger `purge/hard --before --user-id` mit Confirm-Prompt. CSV-Export bekommt `deleted_at`-Spalte. Migration mit chunked Backfill (500er-Batches, idempotent, resumable). Major-Bump auf v2.0.0 — erledigt 2026-05-05
