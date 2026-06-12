@@ -194,4 +194,19 @@ return [
     'Back to logs' => 'Zurück zu den Logs',
     'Show user trace' => 'User-Trace anzeigen',
     'This entry has been soft-deleted (rotated by retention).' => 'Dieser Eintrag wurde soft-deleted (durch Retention rotiert).',
+
+    // ─── v2.2: password change logging ────────────────────────────────
+    'Record password changes' => 'Passwortänderungen aufzeichnen',
+    'Logs a password_changed audit row whenever a users password is set, with strength classifications (length ≥ 8, has upper/lower/digit/special). The plaintext password is observed only to compute the booleans — never stored or sent off-instance.' => 'Schreibt einen password_changed-Audit-Eintrag bei jeder Passwort-Setzung mit Stärke-Klassifikationen (Länge ≥ 8, Gross-/Kleinbuchstabe / Ziffer / Sonderzeichen vorhanden). Das Klartext-Passwort wird ausschliesslich für die Boolean-Berechnung gesehen — nie gespeichert oder ausserhalb der Instanz versendet.',
+    'Pwd changed' => 'PW geändert',
+    'Password changes' => 'Passwortänderungen',
+    'Password strength' => 'Passwortstärke',
+    'Length ≥ 8' => 'Länge ≥ 8',
+    'length' => 'Länge',
+    'Uppercase' => 'Grossbuchstabe',
+    'Lowercase' => 'Kleinbuchstabe',
+    'Digit' => 'Ziffer',
+    'Special' => 'Sonderzeichen',
+    'Score' => 'Score',
+    'Triggered by user id %s' => 'Ausgelöst von Benutzer-ID %s',
 ];
