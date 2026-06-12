@@ -34,6 +34,14 @@ class Settings extends Model
     // Off → column stays NULL (no write), filter is hidden.
     public bool $recordClientType = true;
 
+    // Password-change logging (v2.2+). When on, the BEFORE_SAVE /
+    // AFTER_SAVE hooks on the User element capture password-strength
+    // classifications (length ≥ 8, has upper/lower/digit/special)
+    // and write a `password_changed` audit row. The plaintext
+    // password is observed only to compute the booleans — never
+    // stored, never sent off-instance.
+    public bool $recordPasswordChanges = true;
+
     public bool $throttlingEnabled = false;
     public int $failsPerIp = 10;
     public int $failsPerEmail = 5;
@@ -69,6 +77,7 @@ class Settings extends Model
                 'recordCpEvents',
                 'recordFrontendEvents',
                 'recordClientType',
+                'recordPasswordChanges',
             ], 'boolean'],
             [['allowedUserGroupUids'], 'each', 'rule' => ['string']],
         ];

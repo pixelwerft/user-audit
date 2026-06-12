@@ -54,6 +54,14 @@
   on: settings.recordClientType,
 }) }}
 
+{{ forms.lightswitchField({
+  label: 'Record password changes'|t('user-audit'),
+  instructions: 'Logs a password_changed audit row whenever a users password is set, with strength classifications (length ≥ 8, has upper/lower/digit/special). The plaintext password is observed only to compute the booleans — never stored or sent off-instance.'|t('user-audit'),
+  id: 'recordPasswordChanges',
+  name: 'recordPasswordChanges',
+  on: settings.recordPasswordChanges,
+}) }}
+
 <hr>
 
 <h2>{{ 'Retention'|t('user-audit') }}</h2>
@@ -158,6 +166,7 @@
   recordCpEvents: defaults.recordCpEvents,
   recordFrontendEvents: defaults.recordFrontendEvents,
   recordClientType: defaults.recordClientType,
+  recordPasswordChanges: defaults.recordPasswordChanges,
   throttlingEnabled: defaults.throttlingEnabled,
   failsPerIp: defaults.failsPerIp,
   failsPerEmail: defaults.failsPerEmail,
@@ -241,6 +250,7 @@
     setLightswitch('recordCpEvents', !!defaults.recordCpEvents);
     setLightswitch('recordFrontendEvents', !!defaults.recordFrontendEvents);
     setLightswitch('recordClientType', !!defaults.recordClientType);
+    setLightswitch('recordPasswordChanges', !!defaults.recordPasswordChanges);
     setLightswitch('throttlingEnabled', !!defaults.throttlingEnabled);
     setLightswitch('newLocationAlertsEnabled', !!defaults.newLocationAlertsEnabled);
 
