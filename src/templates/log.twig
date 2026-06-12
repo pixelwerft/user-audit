@@ -16,11 +16,12 @@
 ] %}
 
 {% set statusMap = {
-  'login':           { label: 'Login'|t('user-audit'),    color: '#16a34a', bg: '#dcfce7' },
-  'logout':          { label: 'Logout'|t('user-audit'),   color: '#475569', bg: '#f1f5f9' },
-  'login_failed':    { label: 'Failed'|t('user-audit'),   color: '#c2410c', bg: '#fff7ed' },
-  'login_blocked':   { label: 'Blocked'|t('user-audit'),  color: '#b91c1c', bg: '#fee2e2' },
-  'session_expired': { label: 'Expired'|t('user-audit'),  color: '#0369a1', bg: '#e0f2fe' },
+  'login':            { label: 'Login'|t('user-audit'),       color: '#16a34a', bg: '#dcfce7' },
+  'logout':           { label: 'Logout'|t('user-audit'),      color: '#475569', bg: '#f1f5f9' },
+  'login_failed':     { label: 'Failed'|t('user-audit'),      color: '#c2410c', bg: '#fff7ed' },
+  'login_blocked':    { label: 'Blocked'|t('user-audit'),     color: '#b91c1c', bg: '#fee2e2' },
+  'session_expired':  { label: 'Expired'|t('user-audit'),     color: '#0369a1', bg: '#e0f2fe' },
+  'password_changed': { label: 'Pwd changed'|t('user-audit'), color: '#6d28d9', bg: '#ede9fe' },
 } %}
 {% set statusInfo = statusMap[element.eventType] ?? { label: element.eventType, color: '#7c3aed', bg: '#ede9fe' } %}
 
@@ -158,8 +159,46 @@
       </dl>
     </section>
 
-    {# ---- Metadata (custom-event payload) ---- #}
-    {% if parsedMetadata %}
+    {# ---- Password strength (v2.2) ---- #}
+    {# Only render the structured strength card for password_changed
+       events. Any other event whose metadata happens to include
+       passwordStrength keys falls through to the generic JSON dump. #}
+    {% if element.eventType == 'password_changed' and parsedMetadata.passwordStrength is defined %}
+      {% set s = parsedMetadata.passwordStrength %}
+      <section class="ua-log-card ua-log-card-wide">
+        <h2>{{ 'Password strength'|t('user-audit') }}</h2>
+        <div class="ua-pwd-flags">
+          <div class="ua-pwd-flag {{ s.meetsMin8 ? 'ua-pwd-on' : 'ua-pwd-off' }}">
+            <strong>{{ 'Length ≥ 8'|t('user-audit') }}</strong>
+            <span>{{ 'length'|t('user-audit') }}: {{ s.length }}</span>
+          </div>
+          <div class="ua-pwd-flag {{ s.hasUpper ? 'ua-pwd-on' : 'ua-pwd-off' }}">
+            <strong>{{ 'Uppercase'|t('user-audit') }}</strong>
+          </div>
+          <div class="ua-pwd-flag {{ s.hasLower ? 'ua-pwd-on' : 'ua-pwd-off' }}">
+            <strong>{{ 'Lowercase'|t('user-audit') }}</strong>
+          </div>
+          <div class="ua-pwd-flag {{ s.hasDigit ? 'ua-pwd-on' : 'ua-pwd-off' }}">
+            <strong>{{ 'Digit'|t('user-audit') }}</strong>
+          </div>
+          <div class="ua-pwd-flag {{ s.hasSpecial ? 'ua-pwd-on' : 'ua-pwd-off' }}">
+            <strong>{{ 'Special'|t('user-audit') }}</strong>
+          </div>
+        </div>
+        <p class="ua-pwd-score">
+          {{ 'Score'|t('user-audit') }}:
+          <strong>{{ s.score }} / 5</strong>
+        </p>
+        {% if parsedMetadata.triggeredBy is defined and parsedMetadata.triggeredBy %}
+          <p class="ua-pwd-triggered">
+            {{ 'Triggered by user id %s'|t('user-audit')|format(parsedMetadata.triggeredBy) }}
+          </p>
+        {% endif %}
+      </section>
+    {% endif %}
+
+    {# ---- Metadata (raw payload — fallback for non-password events) ---- #}
+    {% if parsedMetadata and element.eventType != 'password_changed' %}
       <section class="ua-log-card ua-log-card-wide">
         <h2>{{ 'Metadata'|t('user-audit') }}</h2>
         <pre class="ua-log-meta">{{ parsedMetadata|json_encode(constant('JSON_PRETTY_PRINT') b-or constant('JSON_UNESCAPED_UNICODE') b-or constant('JSON_UNESCAPED_SLASHES')) }}</pre>
@@ -284,6 +323,51 @@
   gap: 0.5rem;
   padding-top: 1rem;
   border-top: 1px solid #e5e7eb;
+}
+
+/* v2.2: password strength card. Each flag is a tinted box; positive
+   = violet-filled, negative = muted gray. Avoids red/green which
+   would imply weak vs strong as a binary good/bad — score gives
+   the actual reading. */
+.ua-pwd-flags {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.ua-pwd-flag {
+  padding: 0.6rem 0.75rem;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  font-size: 0.85rem;
+}
+.ua-pwd-flag strong {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 0.15rem;
+}
+.ua-pwd-flag span {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+.ua-pwd-on {
+  background: #ede9fe;
+  border-color: #c4b5fd;
+  color: #5b21b6;
+}
+.ua-pwd-off {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #94a3b8;
+}
+.ua-pwd-score {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.ua-pwd-triggered {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: #64748b;
 }
 {% endcss %}
 
