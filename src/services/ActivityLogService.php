@@ -24,6 +24,7 @@ class ActivityLogService extends Component
     public const EVENT_LOGIN_FAILED = 'login_failed';
     public const EVENT_LOGIN_BLOCKED = 'login_blocked';
     public const EVENT_SESSION_EXPIRED = 'session_expired';
+    public const EVENT_PASSWORD_CHANGED = 'password_changed';
 
     public const CONTEXT_CP = 'cp';
     public const CONTEXT_FE = 'fe';
@@ -34,6 +35,21 @@ class ActivityLogService extends Component
     // Header the PWA sets on login/logout/session-expired requests.
     // Anything else comes from a regular browser or the CP.
     public const CLIENT_HEADER = 'X-Reest-Client';
+
+    /**
+     * Per-request, in-memory map for the password-change flow.
+     * BEFORE_SAVE on the User element computes strength flags from
+     * the still-plaintext $user->newPassword and parks them here
+     * keyed by user id. AFTER_SAVE pops the entry and writes the
+     * audit row — at that point the plaintext is already hashed and
+     * gone from the User instance.
+     *
+     * Critical: this map only ever holds derived boolean flags +
+     * integer length/score. The plaintext password never enters it.
+     *
+     * @var array<int, array{flags: array<string,bool|int>, triggeredBy: int|null}>
+     */
+    private array $pendingPasswordChanges = [];
 
     /**
      * @param string        $eventType Core constant or an arbitrary string.
@@ -272,5 +288,111 @@ class ActivityLogService extends Component
         return (int)Craft::$app->getDb()->createCommand()
             ->delete('{{%user_activity_log}}', $conditions)
             ->execute();
+    }
+
+    // ------------------------------------------------------------------
+    // Password-change strength flow (v2.2+)
+    // ------------------------------------------------------------------
+    //
+    // Privacy contract: the plaintext password is observed in exactly
+    // one place — `computePasswordStrengthFlags()` — and only long
+    // enough to derive 5 boolean classifications and an integer
+    // length. The string is never stored, copied, hashed, returned,
+    // logged or sent off-instance. Callers MUST NOT cache or pass the
+    // plaintext anywhere else. The `meta` parameter on log() is also
+    // not allowed to carry the plaintext.
+
+    /**
+     * Derives strength classifications from a plaintext password.
+     *
+     * No regex / no lookahead — five plain mb_*/ctype-style scans,
+     * fast enough to run synchronously in the BEFORE_SAVE handler
+     * and trivial to reason about. The "special" class is "anything
+     * that is not a letter and not a digit and not whitespace",
+     * which covers the typical punctuation + Unicode-symbol classes
+     * without committing to a fixed allow-list.
+     *
+     * @return array{length:int, meetsMin8:bool, hasUpper:bool, hasLower:bool, hasDigit:bool, hasSpecial:bool, score:int}
+     */
+    public static function computePasswordStrengthFlags(string $plaintext): array
+    {
+        $length = mb_strlen($plaintext);
+        $meetsMin8 = $length >= 8;
+
+        $hasUpper = $hasLower = $hasDigit = $hasSpecial = false;
+        $len = $length;
+        for ($i = 0; $i < $len; $i++) {
+            $ch = mb_substr($plaintext, $i, 1);
+            if (preg_match('/^\p{Lu}$/u', $ch)) {
+                $hasUpper = true;
+            } elseif (preg_match('/^\p{Ll}$/u', $ch)) {
+                $hasLower = true;
+            } elseif (preg_match('/^\d$/', $ch)) {
+                $hasDigit = true;
+            } elseif (preg_match('/^\s$/u', $ch)) {
+                // whitespace doesn't count toward "special"
+            } else {
+                $hasSpecial = true;
+            }
+            if ($hasUpper && $hasLower && $hasDigit && $hasSpecial) {
+                // Early exit — we already know all four classes are
+                // present, no need to keep scanning a long password.
+                break;
+            }
+        }
+
+        $score = ($meetsMin8 ? 1 : 0)
+            + ($hasUpper ? 1 : 0)
+            + ($hasLower ? 1 : 0)
+            + ($hasDigit ? 1 : 0)
+            + ($hasSpecial ? 1 : 0);
+
+        return compact(
+            'length',
+            'meetsMin8',
+            'hasUpper',
+            'hasLower',
+            'hasDigit',
+            'hasSpecial',
+            'score'
+        );
+    }
+
+    /**
+     * Parks the strength flags for a pending password change.
+     * Called from the User::EVENT_BEFORE_SAVE hook in UserAudit.
+     *
+     * @param array<string,bool|int> $flags Output of computePasswordStrengthFlags()
+     * @param int|null               $triggeredBy User id of the actor causing
+     *                                            the change when it differs
+     *                                            from the target user (e.g.
+     *                                            an admin resetting someone
+     *                                            else's password). null for
+     *                                            self-changes.
+     */
+    public function capturePendingPasswordStrength(
+        int $userId,
+        array $flags,
+        ?int $triggeredBy = null
+    ): void {
+        $this->pendingPasswordChanges[$userId] = [
+            'flags' => $flags,
+            'triggeredBy' => $triggeredBy,
+        ];
+    }
+
+    /**
+     * Pops and returns a previously captured strength record, or
+     * null if no pending change exists for this user. The popped
+     * entry is removed from the map so a subsequent save in the
+     * same request without a new password does not double-log.
+     *
+     * @return array{flags: array<string,bool|int>, triggeredBy: int|null}|null
+     */
+    public function flushPendingPasswordChange(int $userId): ?array
+    {
+        $entry = $this->pendingPasswordChanges[$userId] ?? null;
+        unset($this->pendingPasswordChanges[$userId]);
+        return $entry;
     }
 }

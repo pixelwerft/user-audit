@@ -300,6 +300,109 @@ class UserAudit extends Plugin
                 }
             }
         );
+
+        // ----------------------------------------------------------
+        // Password changes (v2.2+)
+        //
+        // Two-phase hook because we need the still-plaintext password
+        // (available on BEFORE_SAVE as $user->newPassword) to compute
+        // strength flags, but we only want to write the audit row
+        // once the save actually succeeded — Craft fires AFTER_SAVE
+        // only on success, so the pending entry survives if the save
+        // failed and gets discarded at request end with no log line.
+        //
+        // Self-changes vs admin-triggered: the BEFORE_SAVE handler
+        // captures the actor (Craft::$app->user->identity) only when
+        // it differs from the target. Self-changes pass triggeredBy
+        // as null.
+        // ----------------------------------------------------------
+        Event::on(
+            UserElement::class,
+            UserElement::EVENT_BEFORE_SAVE,
+            function (\craft\events\ModelEvent $event) {
+                try {
+                    /** @var UserElement $user */
+                    $user = $event->sender;
+                    if (empty($user->newPassword)) {
+                        return;
+                    }
+                    /** @var Settings $settings */
+                    $settings = $this->getSettings();
+                    if (!$settings->recordPasswordChanges) {
+                        return;
+                    }
+                    if ($user->id === null) {
+                        // BEFORE_SAVE on a brand-new user fires before
+                        // an id is assigned. AFTER_SAVE will have one;
+                        // we can not key the pending map yet so we
+                        // skip new-user creation. Initial passwords are
+                        // re-captured the first time the user changes
+                        // theirs through the activation flow.
+                        return;
+                    }
+
+                    $flags = ActivityLogService::computePasswordStrengthFlags(
+                        (string)$user->newPassword
+                    );
+
+                    $actor = Craft::$app->getUser()->getIdentity();
+                    $triggeredBy = null;
+                    if ($actor !== null && (int)$actor->id !== (int)$user->id) {
+                        $triggeredBy = (int)$actor->id;
+                    }
+
+                    $this->activityLog->capturePendingPasswordStrength(
+                        (int)$user->id,
+                        $flags,
+                        $triggeredBy
+                    );
+                } catch (\Throwable $e) {
+                    Craft::error(
+                        '[user-audit] before-save pwd hook: ' . $e->getMessage(),
+                        __CLASS__
+                    );
+                }
+            }
+        );
+
+        Event::on(
+            UserElement::class,
+            UserElement::EVENT_AFTER_SAVE,
+            function (\craft\events\ModelEvent $event) {
+                try {
+                    /** @var UserElement $user */
+                    $user = $event->sender;
+                    if ($user->id === null) {
+                        return;
+                    }
+                    $entry = $this->activityLog->flushPendingPasswordChange(
+                        (int)$user->id
+                    );
+                    if ($entry === null) {
+                        return;
+                    }
+
+                    $metadata = ['passwordStrength' => $entry['flags']];
+                    if ($entry['triggeredBy'] !== null) {
+                        $metadata['triggeredBy'] = $entry['triggeredBy'];
+                    }
+
+                    $this->activityLog->log(
+                        ActivityLogService::EVENT_PASSWORD_CHANGED,
+                        (int)$user->id,
+                        [
+                            'email' => $user->email,
+                            'metadata' => $metadata,
+                        ]
+                    );
+                } catch (\Throwable $e) {
+                    Craft::error(
+                        '[user-audit] after-save pwd hook: ' . $e->getMessage(),
+                        __CLASS__
+                    );
+                }
+            }
+        );
     }
 
     private function registerCpRoutes(): void
