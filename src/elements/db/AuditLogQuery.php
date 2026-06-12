@@ -233,11 +233,12 @@ class AuditLogQuery extends ElementQuery
     protected function statusCondition(string $status): mixed
     {
         return match ($status) {
-            AuditLog::STATUS_SUCCESS => ['user_activity_log.eventType' => ActivityLogService::EVENT_LOGIN],
-            AuditLog::STATUS_NEUTRAL => ['user_activity_log.eventType' => ActivityLogService::EVENT_LOGOUT],
-            AuditLog::STATUS_FAILURE => ['user_activity_log.eventType' => ActivityLogService::EVENT_LOGIN_FAILED],
-            AuditLog::STATUS_BLOCKED => ['user_activity_log.eventType' => ActivityLogService::EVENT_LOGIN_BLOCKED],
-            AuditLog::STATUS_EXPIRED => ['user_activity_log.eventType' => ActivityLogService::EVENT_SESSION_EXPIRED],
+            AuditLog::STATUS_SUCCESS     => ['user_activity_log.eventType' => ActivityLogService::EVENT_LOGIN],
+            AuditLog::STATUS_NEUTRAL     => ['user_activity_log.eventType' => ActivityLogService::EVENT_LOGOUT],
+            AuditLog::STATUS_FAILURE     => ['user_activity_log.eventType' => ActivityLogService::EVENT_LOGIN_FAILED],
+            AuditLog::STATUS_BLOCKED     => ['user_activity_log.eventType' => ActivityLogService::EVENT_LOGIN_BLOCKED],
+            AuditLog::STATUS_EXPIRED     => ['user_activity_log.eventType' => ActivityLogService::EVENT_SESSION_EXPIRED],
+            AuditLog::STATUS_PWD_CHANGED => ['user_activity_log.eventType' => ActivityLogService::EVENT_PASSWORD_CHANGED],
             // "Other" = anything that's not one of the well-known
             // events. Lets custom-event entries surface in the index.
             AuditLog::STATUS_OTHER => ['not in', 'user_activity_log.eventType', [
@@ -246,6 +247,7 @@ class AuditLogQuery extends ElementQuery
                 ActivityLogService::EVENT_LOGIN_FAILED,
                 ActivityLogService::EVENT_LOGIN_BLOCKED,
                 ActivityLogService::EVENT_SESSION_EXPIRED,
+                ActivityLogService::EVENT_PASSWORD_CHANGED,
             ]],
             default => parent::statusCondition($status),
         };

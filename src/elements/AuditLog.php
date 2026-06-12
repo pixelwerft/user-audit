@@ -39,12 +39,13 @@ use pixelwerft\useraudit\UserAudit;
  */
 class AuditLog extends Element
 {
-    public const STATUS_SUCCESS = 'success';
-    public const STATUS_NEUTRAL = 'neutral';
-    public const STATUS_FAILURE = 'failure';
-    public const STATUS_BLOCKED = 'blocked';
-    public const STATUS_EXPIRED = 'expired';
-    public const STATUS_OTHER   = 'other';
+    public const STATUS_SUCCESS     = 'success';
+    public const STATUS_NEUTRAL     = 'neutral';
+    public const STATUS_FAILURE     = 'failure';
+    public const STATUS_BLOCKED     = 'blocked';
+    public const STATUS_EXPIRED     = 'expired';
+    public const STATUS_PWD_CHANGED = 'pwd_changed';
+    public const STATUS_OTHER       = 'other';
 
     // ------------------------------------------------------------------
     // Audit-row columns mirrored onto the element instance.
@@ -140,24 +141,26 @@ class AuditLog extends Element
     public static function statuses(): array
     {
         return [
-            self::STATUS_SUCCESS => ['label' => Craft::t('user-audit', 'Login'),    'color' => 'green'],
-            self::STATUS_NEUTRAL => ['label' => Craft::t('user-audit', 'Logout'),   'color' => 'gray'],
-            self::STATUS_FAILURE => ['label' => Craft::t('user-audit', 'Failed'),   'color' => 'orange'],
-            self::STATUS_BLOCKED => ['label' => Craft::t('user-audit', 'Blocked'),  'color' => 'red'],
-            self::STATUS_EXPIRED => ['label' => Craft::t('user-audit', 'Expired'),  'color' => 'blue'],
-            self::STATUS_OTHER   => ['label' => Craft::t('user-audit', 'Other'),    'color' => 'fuchsia'],
+            self::STATUS_SUCCESS     => ['label' => Craft::t('user-audit', 'Login'),       'color' => 'green'],
+            self::STATUS_NEUTRAL     => ['label' => Craft::t('user-audit', 'Logout'),      'color' => 'gray'],
+            self::STATUS_FAILURE     => ['label' => Craft::t('user-audit', 'Failed'),      'color' => 'orange'],
+            self::STATUS_BLOCKED     => ['label' => Craft::t('user-audit', 'Blocked'),     'color' => 'red'],
+            self::STATUS_EXPIRED     => ['label' => Craft::t('user-audit', 'Expired'),     'color' => 'blue'],
+            self::STATUS_PWD_CHANGED => ['label' => Craft::t('user-audit', 'Pwd changed'), 'color' => 'violet'],
+            self::STATUS_OTHER       => ['label' => Craft::t('user-audit', 'Other'),       'color' => 'fuchsia'],
         ];
     }
 
     public function getStatus(): ?string
     {
         return match ($this->eventType) {
-            ActivityLogService::EVENT_LOGIN           => self::STATUS_SUCCESS,
-            ActivityLogService::EVENT_LOGOUT          => self::STATUS_NEUTRAL,
-            ActivityLogService::EVENT_LOGIN_FAILED    => self::STATUS_FAILURE,
-            ActivityLogService::EVENT_LOGIN_BLOCKED   => self::STATUS_BLOCKED,
-            ActivityLogService::EVENT_SESSION_EXPIRED => self::STATUS_EXPIRED,
-            default                                   => self::STATUS_OTHER,
+            ActivityLogService::EVENT_LOGIN            => self::STATUS_SUCCESS,
+            ActivityLogService::EVENT_LOGOUT           => self::STATUS_NEUTRAL,
+            ActivityLogService::EVENT_LOGIN_FAILED     => self::STATUS_FAILURE,
+            ActivityLogService::EVENT_LOGIN_BLOCKED    => self::STATUS_BLOCKED,
+            ActivityLogService::EVENT_SESSION_EXPIRED  => self::STATUS_EXPIRED,
+            ActivityLogService::EVENT_PASSWORD_CHANGED => self::STATUS_PWD_CHANGED,
+            default                                    => self::STATUS_OTHER,
         };
     }
 
@@ -221,6 +224,11 @@ class AuditLog extends Element
                 'key'      => 'event:session_expired',
                 'label'    => Craft::t('user-audit', 'Session expired'),
                 'criteria' => ['eventType' => ActivityLogService::EVENT_SESSION_EXPIRED],
+            ],
+            [
+                'key'      => 'event:password_changed',
+                'label'    => Craft::t('user-audit', 'Password changes'),
+                'criteria' => ['eventType' => ActivityLogService::EVENT_PASSWORD_CHANGED],
             ],
             ['heading' => Craft::t('user-audit', 'By context')],
             [

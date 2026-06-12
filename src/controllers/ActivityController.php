@@ -206,11 +206,12 @@ class ActivityController extends Controller
      * keys aligned with ActivityLogService::EVENT_* constants.
      */
     private const MONITOR_EVENT_COLORS = [
-        'login'           => '#16a34a', // green
-        'logout'          => '#64748b', // slate
-        'login_failed'    => '#ea580c', // orange
-        'login_blocked'   => '#dc2626', // red
-        'session_expired' => '#0ea5e9', // sky
+        'login'            => '#16a34a', // green
+        'logout'           => '#64748b', // slate
+        'login_failed'     => '#ea580c', // orange
+        'login_blocked'    => '#dc2626', // red
+        'session_expired'  => '#0ea5e9', // sky
+        'password_changed' => '#8b5cf6', // violet (v2.2)
     ];
 
     /** Decorative swatch colors for the context checkbox dropdown. */
