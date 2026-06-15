@@ -3,6 +3,19 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2.2.2 - 2026-06-12
+
+### Fixed
+- `ActivityLogService.php` was unparseable with
+  `ParseError: syntax error, unexpected identifier "ctype"` because
+  the docblock above `computePasswordStrengthFlags()` contained a
+  literal `mb_*/ctype-style` — the `*/` inside terminated the
+  docblock prematurely and PHP tried to parse the rest of the
+  comment as code. Rewrote the docblock without an embedded `*/`
+  sequence and grepped the rest of the v2.2 PHP surface for the
+  same pitfall (none found). Should never have shipped — adding a
+  PHP-lint pre-commit check to the project standards as follow-up.
+
 ## 2.2.1 - 2026-06-12
 
 ### Fixed
