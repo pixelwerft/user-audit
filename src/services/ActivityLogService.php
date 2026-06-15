@@ -305,12 +305,13 @@ class ActivityLogService extends Component
     /**
      * Derives strength classifications from a plaintext password.
      *
-     * No regex / no lookahead — five plain mb_*/ctype-style scans,
-     * fast enough to run synchronously in the BEFORE_SAVE handler
-     * and trivial to reason about. The "special" class is "anything
-     * that is not a letter and not a digit and not whitespace",
-     * which covers the typical punctuation + Unicode-symbol classes
-     * without committing to a fixed allow-list.
+     * One pass over the string, classify each character via Unicode
+     * `\p{Lu}` / `\p{Ll}` regex tests plus a digit and whitespace
+     * check. The "special" class is "anything that is not a letter
+     * and not a digit and not whitespace", which covers the typical
+     * punctuation and Unicode-symbol classes without committing to a
+     * fixed allow-list. Loop bails out as soon as all four classes
+     * have been seen, so long passwords stay cheap.
      *
      * @return array{length:int, meetsMin8:bool, hasUpper:bool, hasLower:bool, hasDigit:bool, hasSpecial:bool, score:int}
      */
