@@ -3,6 +3,21 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2.2.1 - 2026-06-12
+
+### Fixed
+- Logs index and Monitor templates carried hardcoded event-type
+  lists that did not include `password_changed`, so v2.2.0
+  password-change events:
+  - showed with the generic purple fallback status pill on the
+    logs list instead of the violet `Pwd changed` pill,
+  - were missing from the event-type filter dropdown on both
+    pages (no way to filter to / unfilter from them through the
+    UI).
+  The PHP-side `MONITOR_EVENT_COLORS` constant did know about the
+  new type, but the templates iterate their own Twig-side option
+  lists; both lists are now in sync with the event-type set.
+
 ## 2.2.0 - 2026-06-12
 
 ### Added
