@@ -18,11 +18,12 @@
    place and a designer touching the look does not have to round-trip
    through PHP. #}
 {% set statusPillMap = {
-  'login':           { label: 'Login'|t('user-audit'),    color: '#16a34a', bg: '#dcfce7' },
-  'logout':          { label: 'Logout'|t('user-audit'),   color: '#475569', bg: '#f1f5f9' },
-  'login_failed':    { label: 'Failed'|t('user-audit'),   color: '#c2410c', bg: '#fff7ed' },
-  'login_blocked':   { label: 'Blocked'|t('user-audit'),  color: '#b91c1c', bg: '#fee2e2' },
-  'session_expired': { label: 'Expired'|t('user-audit'),  color: '#0369a1', bg: '#e0f2fe' },
+  'login':            { label: 'Login'|t('user-audit'),       color: '#16a34a', bg: '#dcfce7' },
+  'logout':           { label: 'Logout'|t('user-audit'),      color: '#475569', bg: '#f1f5f9' },
+  'login_failed':     { label: 'Failed'|t('user-audit'),      color: '#c2410c', bg: '#fff7ed' },
+  'login_blocked':    { label: 'Blocked'|t('user-audit'),     color: '#b91c1c', bg: '#fee2e2' },
+  'session_expired':  { label: 'Expired'|t('user-audit'),     color: '#0369a1', bg: '#e0f2fe' },
+  'password_changed': { label: 'Pwd changed'|t('user-audit'), color: '#6d28d9', bg: '#ede9fe' },
 } %}
 
 {% set sortableColumns = {
@@ -83,6 +84,7 @@
             <option value="login_failed" {% if eventType == 'login_failed' %}selected{% endif %}>login_failed</option>
             <option value="login_blocked" {% if eventType == 'login_blocked' %}selected{% endif %}>login_blocked</option>
             <option value="session_expired" {% if eventType == 'session_expired' %}selected{% endif %}>session_expired</option>
+            <option value="password_changed" {% if eventType == 'password_changed' %}selected{% endif %}>password_changed</option>
           </select>
         </div>
       </div>
