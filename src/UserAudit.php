@@ -9,12 +9,16 @@ use craft\elements\User as UserElement;
 use craft\events\LoginFailureEvent;
 use craft\events\RegisterComponentTypesEvent;
 use craft\events\RegisterCpNavItemsEvent;
+use craft\events\RegisterTemplateRootsEvent;
 use craft\events\RegisterUrlRulesEvent;
 use craft\services\Dashboard;
 use craft\services\Elements;
 use craft\web\User as WebUser;
 use craft\web\UrlManager;
+use craft\web\View;
 use craft\web\twig\variables\Cp;
+use craft\web\twig\variables\CraftVariable;
+use pixelwerft\useraudit\variables\UserAuditVariable;
 use pixelwerft\useraudit\elements\AuditLog;
 use pixelwerft\useraudit\models\Settings;
 use pixelwerft\useraudit\services\ActivityLogService;
@@ -87,6 +91,9 @@ class UserAudit extends Plugin
         $this->registerEventHooks();
         $this->registerThrottling();
         $this->registerCpRoutes();
+        $this->registerFeRoutes();
+        $this->registerSiteTemplateRoots();
+        $this->registerVariable();
         $this->registerCpNav();
         $this->registerDashboardWidgets();
         $this->registerElementTypes();
@@ -657,6 +664,59 @@ class UserAudit extends Plugin
                 // sessionId (typically 1 login + 1 logout). The token
                 // is UUID-shaped: lowercase hex plus hyphens only.
                 $event->rules['user-audit/session/<sessionId:[a-f0-9\-]+>'] = 'user-audit/activity/session';
+                // v2.3.0: a user's own activity, inside the CP.
+                $event->rules['user-audit/my-activity'] = 'user-audit/activity/my';
+            }
+        );
+    }
+
+    /**
+     * v2.3.0: front-end (site) route for the self-service activity
+     * view, so a logged-in user can review their own history without a
+     * CP account. requireLogin is enforced in the controller.
+     */
+    private function registerFeRoutes(): void
+    {
+        Event::on(
+            UrlManager::class,
+            UrlManager::EVENT_REGISTER_SITE_URL_RULES,
+            function (RegisterUrlRulesEvent $event) {
+                $event->rules['user-audit/my-activity'] = 'user-audit/activity/my';
+            }
+        );
+    }
+
+    /**
+     * v2.3.0: exposes the plugin's templates under the `user-audit`
+     * prefix in site mode too, so the self-service FE template renders
+     * and customer site templates can
+     * `{% include 'user-audit/_widgets/my_activity_snippet' %}`.
+     */
+    private function registerSiteTemplateRoots(): void
+    {
+        Event::on(
+            View::class,
+            View::EVENT_REGISTER_SITE_TEMPLATE_ROOTS,
+            function (RegisterTemplateRootsEvent $event) {
+                $event->roots['user-audit'] = __DIR__ . '/templates';
+            }
+        );
+    }
+
+    /**
+     * v2.3.0: registers the `craft.userAudit` Twig variable, giving
+     * front-end templates a tiny API for the current user's own
+     * history (used by the self-service snippet).
+     */
+    private function registerVariable(): void
+    {
+        Event::on(
+            CraftVariable::class,
+            CraftVariable::EVENT_INIT,
+            function (Event $event) {
+                /** @var CraftVariable $variable */
+                $variable = $event->sender;
+                $variable->set('userAudit', UserAuditVariable::class);
             }
         );
     }

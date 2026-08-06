@@ -48,8 +48,8 @@ class ActivityController extends Controller
 
         // Viewer gate only for the admin-facing actions.
         //   - session-expired: anonymous (user just logged out)
-        //   - my-recent: logged-in user views their own history
-        if (!in_array($action->id, ['session-expired', 'my-recent'], true)) {
+        //   - my-recent / my: logged-in user views their own history
+        if (!in_array($action->id, ['session-expired', 'my-recent', 'my'], true)) {
             $user = Craft::$app->getUser()->getIdentity();
             if (!UserAudit::getInstance()->canAccess($user)) {
                 throw new ForbiddenHttpException(
@@ -58,7 +58,9 @@ class ActivityController extends Controller
             }
         }
 
-        if ($action->id === 'my-recent') {
+        // Self-service endpoints: any authenticated user may see their
+        // own history, no viewer permission required.
+        if (in_array($action->id, ['my-recent', 'my'], true)) {
             $this->requireLogin();
         }
 
@@ -895,6 +897,37 @@ class ActivityController extends Controller
     }
 
     /**
+     * v2.3.0: self-service activity page. Shows the logged-in user
+     * their own last 30 audit rows — no admin/viewer permission, just
+     * requireLogin (enforced in beforeAction). Available both in the
+     * CP (user-audit/my-activity) and on the front end via the site
+     * route of the same path; the template is chosen by request type
+     * so the CP variant gets the CP chrome and the FE variant is
+     * self-contained HTML the customer site can restyle.
+     */
+    public function actionMy(): Response
+    {
+        $userId = (int)Craft::$app->getUser()->getId();
+
+        $rows = UserActivityLog::find()
+            ->where(['userId' => $userId])
+            ->orderBy(['dateCreated' => SORT_DESC])
+            ->limit(30)
+            ->all();
+
+        $isCp = Craft::$app->getRequest()->getIsCpRequest();
+
+        return $this->renderTemplate(
+            $isCp ? 'user-audit/my_activity' : 'user-audit/my_activity_fe',
+            [
+                'title' => Craft::t('user-audit', 'My activity'),
+                'selectedSubnavItem' => 'logs',
+                'rows' => $rows,
+            ]
+        );
+    }
+
+    /**
      * Returns the last N audit entries of the currently logged-in
      * user as JSON. Consumed by the PWA page /konto so the user can
      * review their own login history (trust feature: "where was I
@@ -914,18 +947,27 @@ class ActivityController extends Controller
             ->limit($limit)
             ->all();
 
-        $payload = array_map(fn(UserActivityLog $r) => [
-            'dateCreated' => $r->dateCreated,
-            'eventType' => $r->eventType,
-            'context' => $r->context,
-            'ipAddress' => $r->ipAddress,
-            'deviceType' => $r->deviceType,
-            'osName' => $r->osName,
-            'osVersion' => $r->osVersion,
-            'browserName' => $r->browserName,
-            'browserVersion' => $r->browserVersion,
-            'failureReason' => $r->failureReason,
-        ], $rows);
+        $payload = array_map(function (UserActivityLog $r) {
+            // v2.3.0: surface the session id, the logout row's
+            // duration, and the login row's risk score when present.
+            // All additive — existing consumers keep working.
+            $meta = $r->metadata ? json_decode($r->metadata, true) : null;
+            return [
+                'dateCreated' => $r->dateCreated,
+                'eventType' => $r->eventType,
+                'context' => $r->context,
+                'ipAddress' => $r->ipAddress,
+                'deviceType' => $r->deviceType,
+                'osName' => $r->osName,
+                'osVersion' => $r->osVersion,
+                'browserName' => $r->browserName,
+                'browserVersion' => $r->browserVersion,
+                'failureReason' => $r->failureReason,
+                'sessionId' => $r->sessionId,
+                'sessionDurationSeconds' => is_array($meta) ? ($meta['sessionDurationSeconds'] ?? null) : null,
+                'riskScore' => is_array($meta) ? ($meta['riskScore'] ?? null) : null,
+            ];
+        }, $rows);
 
         return $this->asJson(['entries' => $payload]);
     }

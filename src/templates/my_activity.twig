@@ -1,0 +1,75 @@
+{# v2.3.0: self-service activity view (CP variant) — the logged-in
+   user's own last 30 audit rows. No admin gate; any authenticated CP
+   user reaches this via user-audit/my-activity. #}
+{% extends '_layouts/cp' %}
+
+{% set title = 'My activity'|t('user-audit') %}
+
+{% set statusMap = {
+  'login':                 { label: 'Login'|t('user-audit'),       color: '#16a34a', bg: '#dcfce7' },
+  'logout':                { label: 'Logout'|t('user-audit'),      color: '#475569', bg: '#f1f5f9' },
+  'login_failed':          { label: 'Failed'|t('user-audit'),      color: '#c2410c', bg: '#fff7ed' },
+  'login_blocked':         { label: 'Blocked'|t('user-audit'),     color: '#b91c1c', bg: '#fee2e2' },
+  'session_expired':       { label: 'Expired'|t('user-audit'),     color: '#0369a1', bg: '#e0f2fe' },
+  'password_changed':      { label: 'Pwd changed'|t('user-audit'), color: '#6d28d9', bg: '#ede9fe' },
+  'impersonation_started': { label: 'Impersonation'|t('user-audit'), color: '#b45309', bg: '#fef3c7' },
+  'impersonation_stopped': { label: 'Impers. end'|t('user-audit'),   color: '#b45309', bg: '#fef3c7' },
+} %}
+
+{% block content %}
+<div class="ua-my">
+  <p class="ua-my-intro">
+    {{ 'Your 30 most recent account events — logins, logouts and security notices.'|t('user-audit') }}
+  </p>
+
+  <table class="data fullwidth">
+    <thead>
+      <tr>
+        <th>{{ 'Time'|t('user-audit') }}</th>
+        <th>{{ 'Event'|t('user-audit') }}</th>
+        <th>{{ 'IP'|t('user-audit') }}</th>
+        <th>{{ 'Device'|t('user-audit') }}</th>
+        <th>{{ 'Details'|t('user-audit') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        {% set pill = statusMap[row.eventType] ?? { label: row.eventType, color: '#7c3aed', bg: '#ede9fe' } %}
+        {% set md = row.metadata ? row.metadata|json_decode : null %}
+        <tr>
+          <td style="font-variant-numeric: tabular-nums; white-space: nowrap;">{{ row.dateCreated|date('Y-m-d H:i:s') }}</td>
+          <td>
+            <span style="padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.72rem; font-weight: 600; background: {{ pill.bg }}; color: {{ pill.color }};">
+              {{ pill.label }}
+            </span>
+          </td>
+          <td>{{ row.ipAddress ?: '—' }}</td>
+          <td>{{ row.deviceType ?: '—' }}{% if row.browserName %} · {{ row.browserName }}{% endif %}</td>
+          <td>
+            {% if md and md.sessionDurationSeconds is defined %}
+              {% set secs = md.sessionDurationSeconds %}
+              {% set days = secs // 86400 %}
+              {{ 'Session'|t('user-audit') }}:
+              {%- if days > 0 %} {{ days }}{{ 'd'|t('user-audit') }}{% endif %} {{ secs|date('H:i:s', 'UTC') }}
+            {% elseif md and md.riskScore is defined and md.riskScore >= 1 %}
+              <span title="{{ md.riskSignals|default([])|join(', ') }}"
+                    style="padding: 0.05rem 0.4rem; border-radius: 3px; font-size: 0.72rem; font-weight: 600; background: {{ md.riskScore >= 3 ? '#fee2e2' : '#fef3c7' }}; color: {{ md.riskScore >= 3 ? '#b91c1c' : '#b45309' }};">
+                ⚠ {{ 'Risk'|t('user-audit') }} {{ md.riskScore }}/5
+              </span>
+            {% else %}
+              <span class="light">—</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="centeralign light">{{ 'No activity recorded yet.'|t('user-audit') }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% css %}
+.ua-my { max-width: 900px; }
+.ua-my-intro { color: #64748b; margin-bottom: 1rem; }
+{% endcss %}
+{% endblock %}

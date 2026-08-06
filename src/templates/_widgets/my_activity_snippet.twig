@@ -1,0 +1,54 @@
+{# v2.3.0: embeddable self-service snippet.
+
+   Drop into any front-end template with:
+
+     {% include 'user-audit/_widgets/my_activity_snippet' %}
+
+   It self-fetches the current user's last 5 logins via the
+   craft.userAudit variable, so no controller wiring is needed on the
+   consuming site. Pass your own `entries` to override, and `limit` to
+   change the count:
+
+     {% include 'user-audit/_widgets/my_activity_snippet' with { limit: 3 } %}
+
+   Renders nothing for guests. Styling is intentionally minimal and
+   scoped under .ua-recent so a host site can restyle it. #}
+
+{% set limit = limit is defined ? limit : 5 %}
+{% set entries = entries is defined ? entries : craft.userAudit.recentLogins(limit) %}
+
+{% if entries|length %}
+  <div class="ua-recent">
+    {% if craft.userAudit.hasElevatedRisk(entries) %}
+      <p class="ua-recent-warn">
+        {{ 'One of your recent logins looks unusual. If it wasn’t you, change your password.'|t('user-audit') }}
+      </p>
+    {% endif %}
+    <ul class="ua-recent-list">
+      {% for e in entries %}
+        <li class="ua-recent-item">
+          <span class="ua-recent-time">{{ e.dateCreated|date('Y-m-d H:i') }}</span>
+          <span class="ua-recent-meta">
+            {{ e.ipAddress ?: '—' }}
+            {%- if e.deviceType %} · {{ e.deviceType }}{% endif %}
+            {%- if e.browserName %} · {{ e.browserName }}{% endif %}
+          </span>
+          {% if e.riskScore >= 1 %}
+            <span class="ua-recent-risk{{ e.riskScore >= 3 ? ' is-high' : '' }}">⚠ {{ e.riskScore }}/5</span>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <style>
+    .ua-recent { font-family: system-ui, sans-serif; font-size: 0.9rem; }
+    .ua-recent-warn { background: #fef3c7; color: #92400e; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0 0 0.75rem; }
+    .ua-recent-list { list-style: none; margin: 0; padding: 0; }
+    .ua-recent-item { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; padding: 0.35rem 0; border-bottom: 1px solid #eee; }
+    .ua-recent-time { font-variant-numeric: tabular-nums; color: #334155; }
+    .ua-recent-meta { color: #64748b; }
+    .ua-recent-risk { margin-left: auto; background: #fef3c7; color: #b45309; padding: 0.05rem 0.35rem; border-radius: 3px; font-size: 0.75rem; font-weight: 600; }
+    .ua-recent-risk.is-high { background: #fee2e2; color: #b91c1c; }
+  </style>
+{% endif %}

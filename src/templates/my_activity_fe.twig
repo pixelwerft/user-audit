@@ -1,0 +1,77 @@
+{# v2.3.0: self-service activity view (front-end variant).
+   Rendered for the site route user-audit/my-activity when the request
+   is not a CP request. Deliberately a self-contained, lightly-styled
+   HTML document — a customer site is expected to restyle or replace it.
+   All output is escaped; no CP assets are pulled in. #}
+<!DOCTYPE html>
+<html lang="{{ craft.app.language|slice(0,2) }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>{{ 'My activity'|t('user-audit') }}</title>
+  <style>
+    .ua-fe { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 820px; margin: 2rem auto; padding: 0 1rem; color: #1e293b; }
+    .ua-fe h1 { font-size: 1.4rem; }
+    .ua-fe table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .ua-fe th, .ua-fe td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid #e5e7eb; }
+    .ua-fe th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; }
+    .ua-fe .pill { display: inline-block; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.72rem; font-weight: 600; }
+    .ua-fe .muted { color: #94a3b8; }
+    .ua-fe .risk-hi { background: #fee2e2; color: #b91c1c; padding: 0.05rem 0.4rem; border-radius: 3px; font-weight: 600; }
+    .ua-fe .risk-lo { background: #fef3c7; color: #b45309; padding: 0.05rem 0.4rem; border-radius: 3px; font-weight: 600; }
+  </style>
+</head>
+<body>
+{% set statusMap = {
+  'login':                 { label: 'Login'|t('user-audit'),        bg: '#dcfce7', color: '#16a34a' },
+  'logout':                { label: 'Logout'|t('user-audit'),       bg: '#f1f5f9', color: '#475569' },
+  'login_failed':          { label: 'Failed'|t('user-audit'),       bg: '#fff7ed', color: '#c2410c' },
+  'login_blocked':         { label: 'Blocked'|t('user-audit'),      bg: '#fee2e2', color: '#b91c1c' },
+  'session_expired':       { label: 'Expired'|t('user-audit'),      bg: '#e0f2fe', color: '#0369a1' },
+  'password_changed':      { label: 'Password changed'|t('user-audit'), bg: '#ede9fe', color: '#6d28d9' },
+  'impersonation_started': { label: 'Impersonation'|t('user-audit'), bg: '#fef3c7', color: '#b45309' },
+  'impersonation_stopped': { label: 'Impersonation ended'|t('user-audit'), bg: '#fef3c7', color: '#b45309' },
+} %}
+<div class="ua-fe">
+  <h1>{{ 'My activity'|t('user-audit') }}</h1>
+  <p class="muted">{{ 'Your 30 most recent account events.'|t('user-audit') }}</p>
+  <table>
+    <thead>
+      <tr>
+        <th>{{ 'Time'|t('user-audit') }}</th>
+        <th>{{ 'Event'|t('user-audit') }}</th>
+        <th>{{ 'IP'|t('user-audit') }}</th>
+        <th>{{ 'Device'|t('user-audit') }}</th>
+        <th>{{ 'Details'|t('user-audit') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        {% set pill = statusMap[row.eventType] ?? { label: row.eventType, bg: '#ede9fe', color: '#7c3aed' } %}
+        {% set md = row.metadata ? row.metadata|json_decode : null %}
+        <tr>
+          <td>{{ row.dateCreated|date('Y-m-d H:i:s') }}</td>
+          <td><span class="pill" style="background: {{ pill.bg }}; color: {{ pill.color }};">{{ pill.label }}</span></td>
+          <td>{{ row.ipAddress ?: '—' }}</td>
+          <td>{{ row.deviceType ?: '—' }}{% if row.browserName %} · {{ row.browserName }}{% endif %}</td>
+          <td>
+            {% if md and md.sessionDurationSeconds is defined %}
+              {% set secs = md.sessionDurationSeconds %}
+              {% set days = secs // 86400 %}
+              {{ 'Session'|t('user-audit') }}:{% if days > 0 %} {{ days }}{{ 'd'|t('user-audit') }}{% endif %} {{ secs|date('H:i:s', 'UTC') }}
+            {% elseif md and md.riskScore is defined and md.riskScore >= 1 %}
+              <span class="{{ md.riskScore >= 3 ? 'risk-hi' : 'risk-lo' }}">⚠ {{ 'Risk'|t('user-audit') }} {{ md.riskScore }}/5</span>
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">{{ 'No activity recorded yet.'|t('user-audit') }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+</body>
+</html>
