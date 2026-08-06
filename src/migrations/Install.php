@@ -40,6 +40,10 @@ class Install extends Migration
             'ipAddress' => $this->string(45),
             'userAgent' => $this->text(),
             'client' => $this->string(32),
+            // v2.3.0: server-issued UUID that links login → logout
+            // rows for a single browser session; enables
+            // sessionDurationSeconds computation.
+            'sessionId' => $this->string(36),
             'deviceType' => $this->string(32),
             'osName' => $this->string(64),
             'osVersion' => $this->string(32),
@@ -55,6 +59,7 @@ class Install extends Migration
         $this->createIndex(null, '{{%user_activity_log}}', 'eventType');
         $this->createIndex(null, '{{%user_activity_log}}', 'context');
         $this->createIndex(null, '{{%user_activity_log}}', 'client');
+        $this->createIndex(null, '{{%user_activity_log}}', 'sessionId');
         $this->createIndex(null, '{{%user_activity_log}}', 'dateCreated');
         // Unique elementId — one element per audit row.
         $this->createIndex(null, '{{%user_activity_log}}', 'elementId', true);
