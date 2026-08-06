@@ -157,6 +157,44 @@ class UserAudit extends Plugin
      * be logged. Console events (context=null) are always written —
      * the toggle settings only govern web requests.
      */
+    /**
+     * v2.2.3: Snapshot the given user's group handles as a comma-
+     * separated string, or null if the user has no groups (or is
+     * null). Shared by every auth hook that has a resolved User
+     * identity so the audit log's `userGroups` column stays
+     * consistent across login, logout, failed-login (when the login
+     * name matched) and password-changed events — previously only
+     * login logged groups, which made group-based filtering
+     * misleading (login rows appeared, logout rows didn't).
+     *
+     * Snapshot semantics: reads the groups AT THE TIME OF THE EVENT.
+     * If an admin changes a user's groups between their login and
+     * their logout, the login row shows the old groups and the
+     * logout row shows the new ones — that's a forensic feature,
+     * not a bug.
+     *
+     * A getGroups() failure must never break the auth flow, so any
+     * throwable is swallowed and treated as "no groups".
+     */
+    private function snapshotUserGroups(?UserElement $identity): ?string
+    {
+        if ($identity === null) {
+            return null;
+        }
+        try {
+            $handles = array_map(
+                fn($g) => (string)$g->handle,
+                $identity->getGroups()
+            );
+            if (empty($handles)) {
+                return null;
+            }
+            return implode(',', $handles);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     private function shouldRecord(?string $context): bool
     {
         if ($context === null) return true;
@@ -207,21 +245,7 @@ class UserAudit extends Plugin
                     // Group snapshot: read once per login. Craft caches
                     // the relation internally, and we're after the
                     // login event — the user is already loaded anyway.
-                    $groups = null;
-                    if ($identity) {
-                        try {
-                            $handles = array_map(
-                                fn($g) => (string)$g->handle,
-                                $identity->getGroups()
-                            );
-                            if (!empty($handles)) {
-                                $groups = implode(',', $handles);
-                            }
-                        } catch (\Throwable) {
-                            // Group lookup must never break the auth
-                            // flow. Continue without groups.
-                        }
-                    }
+                    $groups = $this->snapshotUserGroups($identity);
 
                     $this->activityLog->log(
                         ActivityLogService::EVENT_LOGIN,
@@ -256,7 +280,14 @@ class UserAudit extends Plugin
                     $this->activityLog->log(
                         ActivityLogService::EVENT_LOGOUT,
                         $identity ? (int)$identity->getId() : null,
-                        ['email' => $identity?->email]
+                        [
+                            'email' => $identity?->email,
+                            // v2.2.3: snapshot groups at logout too.
+                            // `$event->identity` is still populated —
+                            // Craft fires AFTER_LOGOUT before the
+                            // session actually clears.
+                            'userGroups' => $this->snapshotUserGroups($identity),
+                        ]
                     );
                 } catch (\Throwable $e) {
                     Craft::error(
@@ -290,6 +321,13 @@ class UserAudit extends Plugin
                         [
                             'email' => $event->user?->email ?: ($loginName !== '' ? $loginName : null),
                             'failureReason' => $event->authError ?? $event->message,
+                            // v2.2.3: when the login name matched an
+                            // existing user, snapshot their groups too
+                            // — makes group-based filtering ("who is
+                            // being targeted?") work for failed logins
+                            // as well. Stays null for unknown login
+                            // names because there is no user to snapshot.
+                            'userGroups' => $this->snapshotUserGroups($event->user),
                         ]
                     );
                 } catch (\Throwable $e) {
@@ -392,6 +430,10 @@ class UserAudit extends Plugin
                         (int)$user->id,
                         [
                             'email' => $user->email,
+                            // v2.2.3: consistency with login/logout —
+                            // group snapshot on every event that has
+                            // a User identity.
+                            'userGroups' => $this->snapshotUserGroups($user),
                             'metadata' => $metadata,
                         ]
                     );
