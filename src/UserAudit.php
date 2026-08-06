@@ -44,7 +44,14 @@ use yii\web\UserEvent;
  */
 class UserAudit extends Plugin
 {
-    public string $schemaVersion = '2.0.0';
+    // Bumped from 2.0.0 in v2.3.0: the login hook now writes the
+    // sessionId column on every login, so runtime behaviour depends on
+    // the m260806 migration having run. Bumping the schema version makes
+    // Craft flag the pending migration after a composer update instead
+    // of leaving it to a manual `craft up` — a missed migration would
+    // otherwise silently drop every audit write (the write is
+    // try/catch-guarded so auth never breaks).
+    public string $schemaVersion = '2.3.0';
     public bool $hasCpSettings = true;
 
     /**
