@@ -54,8 +54,16 @@ class AuditLogQuery extends ElementQuery
      * Free-text search across the same set of columns the legacy
      * controller used. Translates to an `OR LIKE` chain so existing
      * filter behaviour is preserved.
+     *
+     * NOTE — deliberately NOT named `$search`: Crafts `ElementQuery`
+     * parent already declares `public mixed $search` for the Craft
+     * search-index integration, and a stricter-typed shadow (e.g.
+     * `?string`) triggers a PHP compile error (LSP violation):
+     * *"Type of ... must be mixed (as in class craft\\elements\\db\\ElementQuery)"*.
+     * Our free-text search does a plain SQL LIKE chain, not the
+     * Craft search index, so we sidestep the name entirely.
      */
-    public ?string $search = null;
+    public ?string $textSearch = null;
 
     public function eventType(mixed $value): self
     {
@@ -117,9 +125,9 @@ class AuditLogQuery extends ElementQuery
         return $this;
     }
 
-    public function search(?string $value): self
+    public function textSearch(?string $value): self
     {
-        $this->search = $value;
+        $this->textSearch = $value;
         return $this;
     }
 
@@ -199,12 +207,12 @@ class AuditLogQuery extends ElementQuery
             $this->subQuery->andWhere(Db::parseParam('user_activity_log.failureReason', $this->failureReason));
         }
 
-        if ($this->search !== null && trim($this->search) !== '') {
+        if ($this->textSearch !== null && trim($this->textSearch) !== '') {
             // OR LIKE chain across the same columns the v1 filter used.
             // userAgent stays excluded — TEXT-column LIKE is a guaranteed
             // bottleneck on big tables and the parsed browser/OS/device
             // columns cover what users actually search for.
-            $needle = '%' . trim($this->search) . '%';
+            $needle = '%' . trim($this->textSearch) . '%';
             $this->subQuery->andWhere([
                 'or',
                 ['like', 'user_activity_log.email', $needle, false],
