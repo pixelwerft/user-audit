@@ -24,6 +24,8 @@
   'login_blocked':    { label: 'Blocked'|t('user-audit'),     color: '#b91c1c', bg: '#fee2e2' },
   'session_expired':  { label: 'Expired'|t('user-audit'),     color: '#0369a1', bg: '#e0f2fe' },
   'password_changed': { label: 'Pwd changed'|t('user-audit'), color: '#6d28d9', bg: '#ede9fe' },
+  'impersonation_started': { label: 'Impersonation'|t('user-audit'), color: '#b45309', bg: '#fef3c7' },
+  'impersonation_stopped': { label: 'Impers. end'|t('user-audit'),   color: '#b45309', bg: '#fef3c7' },
 } %}
 
 {% set sortableColumns = {
@@ -85,6 +87,8 @@
             <option value="login_blocked" {% if eventType == 'login_blocked' %}selected{% endif %}>login_blocked</option>
             <option value="session_expired" {% if eventType == 'session_expired' %}selected{% endif %}>session_expired</option>
             <option value="password_changed" {% if eventType == 'password_changed' %}selected{% endif %}>password_changed</option>
+            <option value="impersonation_started" {% if eventType == 'impersonation_started' %}selected{% endif %}>impersonation_started</option>
+            <option value="impersonation_stopped" {% if eventType == 'impersonation_stopped' %}selected{% endif %}>impersonation_stopped</option>
           </select>
         </div>
       </div>

@@ -22,6 +22,8 @@
   'login_blocked':    { label: 'Blocked'|t('user-audit'),     color: '#b91c1c', bg: '#fee2e2' },
   'session_expired':  { label: 'Expired'|t('user-audit'),     color: '#0369a1', bg: '#e0f2fe' },
   'password_changed': { label: 'Pwd changed'|t('user-audit'), color: '#6d28d9', bg: '#ede9fe' },
+  'impersonation_started': { label: 'Impersonation'|t('user-audit'), color: '#b45309', bg: '#fef3c7' },
+  'impersonation_stopped': { label: 'Impers. end'|t('user-audit'),   color: '#b45309', bg: '#fef3c7' },
 } %}
 {% set statusInfo = statusMap[element.eventType] ?? { label: element.eventType, color: '#7c3aed', bg: '#ede9fe' } %}
 
@@ -228,8 +230,57 @@
       </section>
     {% endif %}
 
-    {# ---- Metadata (raw payload — fallback for non-password events) ---- #}
-    {% if parsedMetadata and element.eventType != 'password_changed' %}
+    {# ---- Impersonation (v2.3) ---- #}
+    {% if element.eventType in ['impersonation_started', 'impersonation_stopped'] %}
+      <section class="ua-log-card">
+        <h2>{{ 'Impersonation'|t('user-audit') }}</h2>
+        <dl>
+          {% if element.eventType == 'impersonation_started' %}
+            <dt>{{ 'Impersonator'|t('user-audit') }}</dt>
+            <dd>
+              {% if parsedMetadata and parsedMetadata.impersonatorId is defined %}
+                <a href="{{ cpUrl('user-audit/user/' ~ parsedMetadata.impersonatorId) }}">
+                  {{ 'User %s'|t('user-audit')|format(parsedMetadata.impersonatorId) }}
+                </a>
+              {% else %}
+                <span class="light">—</span>
+              {% endif %}
+            </dd>
+            <dt>{{ 'Acting as'|t('user-audit') }}</dt>
+            <dd>
+              {% if element.auditUserId %}
+                <a href="{{ cpUrl('user-audit/user/' ~ element.auditUserId) }}">{{ element.email ?: element.auditUserId }}</a>
+              {% else %}
+                <span class="light">—</span>
+              {% endif %}
+            </dd>
+          {% else %}
+            <dt>{{ 'Returned to'|t('user-audit') }}</dt>
+            <dd>
+              {% if element.auditUserId %}
+                <a href="{{ cpUrl('user-audit/user/' ~ element.auditUserId) }}">{{ element.email ?: element.auditUserId }}</a>
+              {% else %}
+                <span class="light">—</span>
+              {% endif %}
+            </dd>
+            <dt>{{ 'Was impersonating'|t('user-audit') }}</dt>
+            <dd>
+              {% if parsedMetadata and parsedMetadata.wasImpersonatingUserId is defined and parsedMetadata.wasImpersonatingUserId %}
+                <a href="{{ cpUrl('user-audit/user/' ~ parsedMetadata.wasImpersonatingUserId) }}">
+                  {{ 'User %s'|t('user-audit')|format(parsedMetadata.wasImpersonatingUserId) }}
+                </a>
+              {% else %}
+                <span class="light">—</span>
+              {% endif %}
+            </dd>
+          {% endif %}
+        </dl>
+      </section>
+    {% endif %}
+
+    {# ---- Metadata (raw payload — fallback for events without a
+       dedicated card above) ---- #}
+    {% if parsedMetadata and element.eventType not in ['password_changed', 'impersonation_started', 'impersonation_stopped'] %}
       <section class="ua-log-card ua-log-card-wide">
         <h2>{{ 'Metadata'|t('user-audit') }}</h2>
         <pre class="ua-log-meta">{{ parsedMetadata|json_encode(constant('JSON_PRETTY_PRINT') b-or constant('JSON_UNESCAPED_UNICODE') b-or constant('JSON_UNESCAPED_SLASHES')) }}</pre>

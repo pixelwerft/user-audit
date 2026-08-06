@@ -50,6 +50,15 @@ class UserAudit extends Plugin
      */
     private const SESSION_ID_KEY = 'userAudit.sessionId';
 
+    /**
+     * v2.3.0: Craft-session key holding the impersonation marker
+     * ({impersonatorId, impersonatedUserId}) set when an impersonation
+     * starts, so the eventual return can be logged as
+     * `impersonation_stopped`. Self-managed and confined to the
+     * browser session — it never leaks across logins.
+     */
+    private const IMPERSONATION_KEY = 'userAudit.impersonation';
+
     public static function config(): array
     {
         return [
@@ -202,6 +211,84 @@ class UserAudit extends Plugin
         }
     }
 
+    /**
+     * v2.3.0: Classifies an AFTER_LOGIN event as a normal login, the
+     * start of an impersonation, or the return from one.
+     *
+     * Detection:
+     *  - START: Craft reports an impersonator for the current session
+     *    (`getImpersonator()`) whose id differs from the identity now
+     *    logged in — i.e. an admin just stepped into another account.
+     *    A marker is stashed so the eventual return can be recognised.
+     *  - STOP:  no impersonator is active, but our own marker is still
+     *    present and the identity now logging in equals the stored
+     *    impersonator — i.e. the admin returned to their own account.
+     *    The marker is cleared.
+     *
+     * Both branches are guarded: a getImpersonator()/session failure
+     * degrades to a plain `login` rather than breaking the auth flow.
+     * The marker lives only inside the browser session and is cleared
+     * on logout, so it can never produce a cross-session false event.
+     *
+     * @return array{0:string,1:array<string,mixed>} [eventType, extraMetadata]
+     */
+    private function classifyLoginEvent(?UserElement $identity): array
+    {
+        if ($identity === null) {
+            return [ActivityLogService::EVENT_LOGIN, []];
+        }
+
+        $session = Craft::$app->getSession();
+
+        $impersonator = null;
+        try {
+            $impersonator = Craft::$app->getUser()->getImpersonator();
+        } catch (\Throwable) {
+            // Treat an unavailable impersonator as "not impersonating".
+        }
+
+        if ($impersonator !== null && (int)$impersonator->id !== (int)$identity->id) {
+            // Impersonation just started.
+            try {
+                $session->set(self::IMPERSONATION_KEY, [
+                    'impersonatorId' => (int)$impersonator->id,
+                    'impersonatedUserId' => (int)$identity->id,
+                ]);
+            } catch (\Throwable) {
+                // Without the marker we simply can't log the later
+                // return — the _started row is still written.
+            }
+            return [
+                ActivityLogService::EVENT_IMPERSONATION_STARTED,
+                ['impersonatorId' => (int)$impersonator->id],
+            ];
+        }
+
+        // Not currently impersonating — is this a return?
+        $marker = null;
+        try {
+            $marker = $session->get(self::IMPERSONATION_KEY);
+        } catch (\Throwable) {
+            // no session — fall through to plain login
+        }
+        if (
+            is_array($marker)
+            && isset($marker['impersonatorId'])
+            && (int)$marker['impersonatorId'] === (int)$identity->id
+        ) {
+            try {
+                $session->remove(self::IMPERSONATION_KEY);
+            } catch (\Throwable) {
+            }
+            return [
+                ActivityLogService::EVENT_IMPERSONATION_STOPPED,
+                ['wasImpersonatingUserId' => (int)($marker['impersonatedUserId'] ?? 0)],
+            ];
+        }
+
+        return [ActivityLogService::EVENT_LOGIN, []];
+    }
+
     private function shouldRecord(?string $context): bool
     {
         if ($context === null) return true;
@@ -227,14 +314,22 @@ class UserAudit extends Plugin
                     $identity = $event->identity;
                     $userId = $identity ? (int)$identity->getId() : null;
 
+                    // v2.3.0: classify the login as a normal login, an
+                    // impersonation start, or an impersonation return.
+                    // $extraMeta is merged into the row's metadata JSON.
+                    [$eventType, $extraMeta] = $this->classifyLoginEvent($identity);
+
                     // New-location check BEFORE the audit write: the
                     // current login is not yet in the table, so
-                    // isNewLocation() only sees prior entries.
+                    // isNewLocation() only sees prior entries. Only real
+                    // logins trigger the alert — an admin impersonating a
+                    // user must not email that user "new login detected".
                     $shouldAlert = false;
                     /** @var \pixelwerft\useraudit\models\Settings $settings */
                     $settings = $this->getSettings();
                     if (
-                        $settings->newLocationAlertsEnabled
+                        $eventType === ActivityLogService::EVENT_LOGIN
+                        && $settings->newLocationAlertsEnabled
                         && $userId !== null
                         && $identity !== null
                     ) {
@@ -270,15 +365,16 @@ class UserAudit extends Plugin
                         );
                     }
 
-                    $this->activityLog->log(
-                        ActivityLogService::EVENT_LOGIN,
-                        $userId,
-                        [
-                            'email' => $identity?->email,
-                            'userGroups' => $groups,
-                            'sessionId' => $sessionId,
-                        ]
-                    );
+                    $logMeta = [
+                        'email' => $identity?->email,
+                        'userGroups' => $groups,
+                        'sessionId' => $sessionId,
+                    ];
+                    if ($extraMeta !== []) {
+                        $logMeta['metadata'] = $extraMeta;
+                    }
+
+                    $this->activityLog->log($eventType, $userId, $logMeta);
 
                     if ($shouldAlert && $identity) {
                         $this->sendNewLocationMail($identity);

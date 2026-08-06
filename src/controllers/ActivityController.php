@@ -290,6 +290,8 @@ class ActivityController extends Controller
         'login_blocked'    => '#dc2626', // red
         'session_expired'  => '#0ea5e9', // sky
         'password_changed' => '#8b5cf6', // violet (v2.2)
+        'impersonation_started' => '#b45309', // amber-700 (v2.3)
+        'impersonation_stopped' => '#d97706', // amber-600 (v2.3)
     ];
 
     /** Decorative swatch colors for the context checkbox dropdown. */

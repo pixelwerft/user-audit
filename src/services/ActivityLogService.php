@@ -25,6 +25,11 @@ class ActivityLogService extends Component
     public const EVENT_LOGIN_BLOCKED = 'login_blocked';
     public const EVENT_SESSION_EXPIRED = 'session_expired';
     public const EVENT_PASSWORD_CHANGED = 'password_changed';
+    // v2.3.0: an admin started/stopped acting as another user via
+    // Craft's impersonation. `_started` fires on the impersonation
+    // login (getImpersonator() !== null); `_stopped` on the return.
+    public const EVENT_IMPERSONATION_STARTED = 'impersonation_started';
+    public const EVENT_IMPERSONATION_STOPPED = 'impersonation_stopped';
 
     public const CONTEXT_CP = 'cp';
     public const CONTEXT_FE = 'fe';
@@ -335,13 +340,13 @@ class ActivityLogService extends Component
             return null;
         }
 
-        // Match only `login` for now. Feature 2 (impersonation) adds
-        // `impersonation_started` to this set so impersonation sessions
-        // also get a duration on logout.
+        // A session is opened either by a normal login or by an
+        // impersonation_started row (an admin stepping into another
+        // user's account) — both deserve a duration on logout.
         $loginRow = UserActivityLog::find()
             ->where([
                 'sessionId' => $sessionId,
-                'eventType' => self::EVENT_LOGIN,
+                'eventType' => [self::EVENT_LOGIN, self::EVENT_IMPERSONATION_STARTED],
             ])
             ->orderBy(['dateCreated' => SORT_ASC])
             ->one();

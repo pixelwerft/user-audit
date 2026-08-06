@@ -45,6 +45,7 @@ class AuditLog extends Element
     public const STATUS_BLOCKED     = 'blocked';
     public const STATUS_EXPIRED     = 'expired';
     public const STATUS_PWD_CHANGED = 'pwd_changed';
+    public const STATUS_IMPERSONATION = 'impersonation';
     public const STATUS_OTHER       = 'other';
 
     // ------------------------------------------------------------------
@@ -148,6 +149,7 @@ class AuditLog extends Element
             self::STATUS_BLOCKED     => ['label' => Craft::t('user-audit', 'Blocked'),     'color' => 'red'],
             self::STATUS_EXPIRED     => ['label' => Craft::t('user-audit', 'Expired'),     'color' => 'blue'],
             self::STATUS_PWD_CHANGED => ['label' => Craft::t('user-audit', 'Pwd changed'), 'color' => 'violet'],
+            self::STATUS_IMPERSONATION => ['label' => Craft::t('user-audit', 'Impersonation'), 'color' => 'amber'],
             self::STATUS_OTHER       => ['label' => Craft::t('user-audit', 'Other'),       'color' => 'fuchsia'],
         ];
     }
@@ -161,6 +163,8 @@ class AuditLog extends Element
             ActivityLogService::EVENT_LOGIN_BLOCKED    => self::STATUS_BLOCKED,
             ActivityLogService::EVENT_SESSION_EXPIRED  => self::STATUS_EXPIRED,
             ActivityLogService::EVENT_PASSWORD_CHANGED => self::STATUS_PWD_CHANGED,
+            ActivityLogService::EVENT_IMPERSONATION_STARTED => self::STATUS_IMPERSONATION,
+            ActivityLogService::EVENT_IMPERSONATION_STOPPED => self::STATUS_IMPERSONATION,
             default                                    => self::STATUS_OTHER,
         };
     }
@@ -230,6 +234,14 @@ class AuditLog extends Element
                 'key'      => 'event:password_changed',
                 'label'    => Craft::t('user-audit', 'Password changes'),
                 'criteria' => ['eventType' => ActivityLogService::EVENT_PASSWORD_CHANGED],
+            ],
+            [
+                'key'      => 'event:impersonation',
+                'label'    => Craft::t('user-audit', 'Impersonation'),
+                'criteria' => ['eventType' => [
+                    ActivityLogService::EVENT_IMPERSONATION_STARTED,
+                    ActivityLogService::EVENT_IMPERSONATION_STOPPED,
+                ]],
             ],
             ['heading' => Craft::t('user-audit', 'By context')],
             [
