@@ -51,6 +51,21 @@ class AuditLogQuery extends ElementQuery
     public mixed $failureReason = null;
 
     /**
+     * v2.3.0: filters rows to a single session id.
+     *
+     * NOTE — named `$sessionIdFilter`, not `$sessionId`, on purpose.
+     * A property that shadows a parent ElementQuery property with a
+     * stricter type triggers the PHP "Type of ... must be mixed"
+     * compile error (the v2.2.4 `$search` lesson). `sessionId` does
+     * not currently collide, but keeping filter props off the schema
+     * column names sidesteps the whole class of problem — and the
+     * paired setter reads naturally either way.
+     *
+     * @var string|string[]|null
+     */
+    public mixed $sessionIdFilter = null;
+
+    /**
      * Free-text search across the same set of columns the legacy
      * controller used. Translates to an `OR LIKE` chain so existing
      * filter behaviour is preserved.
@@ -125,6 +140,12 @@ class AuditLogQuery extends ElementQuery
         return $this;
     }
 
+    public function sessionIdFilter(mixed $value): self
+    {
+        $this->sessionIdFilter = $value;
+        return $this;
+    }
+
     public function textSearch(?string $value): self
     {
         $this->textSearch = $value;
@@ -161,6 +182,7 @@ class AuditLogQuery extends ElementQuery
             'user_activity_log.eventType',
             'user_activity_log.context',
             'user_activity_log.client',
+            'user_activity_log.sessionId',
             'user_activity_log.failureReason',
             'user_activity_log.ipAddress',
             'user_activity_log.userAgent',
@@ -205,6 +227,9 @@ class AuditLogQuery extends ElementQuery
         }
         if ($this->failureReason !== null) {
             $this->subQuery->andWhere(Db::parseParam('user_activity_log.failureReason', $this->failureReason));
+        }
+        if ($this->sessionIdFilter !== null) {
+            $this->subQuery->andWhere(Db::parseParam('user_activity_log.sessionId', $this->sessionIdFilter));
         }
 
         if ($this->textSearch !== null && trim($this->textSearch) !== '') {

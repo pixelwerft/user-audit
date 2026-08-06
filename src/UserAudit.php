@@ -43,6 +43,13 @@ class UserAudit extends Plugin
     public string $schemaVersion = '2.0.0';
     public bool $hasCpSettings = true;
 
+    /**
+     * v2.3.0: Craft-session key under which the login hook stashes the
+     * server-issued session id. BEFORE_LOGOUT reads it back to link
+     * the logout row to its login row and compute the duration.
+     */
+    private const SESSION_ID_KEY = 'userAudit.sessionId';
+
     public static function config(): array
     {
         return [
@@ -247,12 +254,29 @@ class UserAudit extends Plugin
                     // login event — the user is already loaded anyway.
                     $groups = $this->snapshotUserGroups($identity);
 
+                    // v2.3.0: issue a session id linking this login to
+                    // its eventual logout row. Server-generated UUID,
+                    // stashed in the Craft session so BEFORE_LOGOUT can
+                    // read it back. A session-write failure must not
+                    // break login — we still log the row (with the id)
+                    // and simply lose the logout correlation.
+                    $sessionId = \craft\helpers\StringHelper::UUID();
+                    try {
+                        Craft::$app->getSession()->set(self::SESSION_ID_KEY, $sessionId);
+                    } catch (\Throwable $e) {
+                        Craft::error(
+                            '[user-audit] could not stash sessionId: ' . $e->getMessage(),
+                            __CLASS__
+                        );
+                    }
+
                     $this->activityLog->log(
                         ActivityLogService::EVENT_LOGIN,
                         $userId,
                         [
                             'email' => $identity?->email,
                             'userGroups' => $groups,
+                            'sessionId' => $sessionId,
                         ]
                     );
 
@@ -268,30 +292,58 @@ class UserAudit extends Plugin
             }
         );
 
+        // v2.3.0: BEFORE_LOGOUT, not AFTER. AFTER_LOGOUT fires *after*
+        // the session has been destroyed, at which point the sessionId
+        // we stashed at login is already gone — so the login↔logout
+        // correlation (and thus the session duration) would be
+        // impossible to compute. At BEFORE_LOGOUT both the identity and
+        // the session data are still intact.
         Event::on(
             WebUser::class,
-            WebUser::EVENT_AFTER_LOGOUT,
+            WebUser::EVENT_BEFORE_LOGOUT,
             function (UserEvent $event) {
                 try {
                     if (!$this->shouldRecord($this->currentContext())) return;
 
                     /** @var \craft\elements\User|null $identity */
                     $identity = $event->identity;
+
+                    $meta = [
+                        'email' => $identity?->email,
+                        // v2.2.3: snapshot groups at logout too.
+                        // `$event->identity` is still populated at
+                        // BEFORE_LOGOUT.
+                        'userGroups' => $this->snapshotUserGroups($identity),
+                    ];
+
+                    // v2.3.0: read the session id back and, if present,
+                    // resolve the session duration from the login row.
+                    // `session_expired` events never reach this hook, so
+                    // the documented "no duration for expired sessions"
+                    // rule holds automatically.
+                    $sessionId = null;
+                    try {
+                        $sessionId = Craft::$app->getSession()->get(self::SESSION_ID_KEY);
+                    } catch (\Throwable) {
+                        // No session available (or already torn down) —
+                        // leave the logout row without a duration.
+                    }
+                    if (is_string($sessionId) && $sessionId !== '') {
+                        $meta['sessionId'] = $sessionId;
+                        $duration = $this->activityLog->resolveSessionDuration($sessionId);
+                        if ($duration !== null) {
+                            $meta['metadata'] = ['sessionDurationSeconds' => $duration];
+                        }
+                    }
+
                     $this->activityLog->log(
                         ActivityLogService::EVENT_LOGOUT,
                         $identity ? (int)$identity->getId() : null,
-                        [
-                            'email' => $identity?->email,
-                            // v2.2.3: snapshot groups at logout too.
-                            // `$event->identity` is still populated —
-                            // Craft fires AFTER_LOGOUT before the
-                            // session actually clears.
-                            'userGroups' => $this->snapshotUserGroups($identity),
-                        ]
+                        $meta
                     );
                 } catch (\Throwable $e) {
                     Craft::error(
-                        '[user-audit] after-logout hook: ' . $e->getMessage(),
+                        '[user-audit] before-logout hook: ' . $e->getMessage(),
                         __CLASS__
                     );
                 }
@@ -470,6 +522,10 @@ class UserAudit extends Plugin
                 // v2.0: read-only detail view for a single audit row.
                 // Title-click in the element index opens this URL.
                 $event->rules['user-audit/log/<elementId:\d+>'] = 'user-audit/activity/log';
+                // v2.3.0: session overview — every row sharing one
+                // sessionId (typically 1 login + 1 logout). The token
+                // is UUID-shaped: lowercase hex plus hyphens only.
+                $event->rules['user-audit/session/<sessionId:[a-f0-9\-]+>'] = 'user-audit/activity/session';
             }
         );
     }

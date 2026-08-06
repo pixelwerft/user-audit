@@ -1,0 +1,249 @@
+{# v2.3.0: session overview — every audit row sharing one server-issued
+   sessionId, in chronological order. Typically a single login + its
+   matching logout, but custom events logged against the same session
+   surface here too. Reached from the "Session" card on a row's detail
+   page. #}
+{% extends '_layouts/cp' %}
+
+{% set title = 'Session'|t('user-audit') %}
+{% set selectedSubnavItem = 'logs' %}
+
+{% set crumbs = [
+  { label: 'User Audit'|t('user-audit'), url: cpUrl('user-audit/logs') },
+  { label: 'Logs'|t('user-audit'),       url: cpUrl('user-audit/logs') }
+] %}
+
+{% set statusMap = {
+  'login':                  { label: 'Login'|t('user-audit'),        color: '#16a34a', bg: '#dcfce7' },
+  'logout':                 { label: 'Logout'|t('user-audit'),       color: '#475569', bg: '#f1f5f9' },
+  'login_failed':           { label: 'Failed'|t('user-audit'),       color: '#c2410c', bg: '#fff7ed' },
+  'login_blocked':          { label: 'Blocked'|t('user-audit'),      color: '#b91c1c', bg: '#fee2e2' },
+  'session_expired':        { label: 'Expired'|t('user-audit'),      color: '#0369a1', bg: '#e0f2fe' },
+  'password_changed':       { label: 'Pwd changed'|t('user-audit'),  color: '#6d28d9', bg: '#ede9fe' },
+} %}
+
+{% block content %}
+
+<div class="ua-log-detail">
+
+  <div class="ua-log-header">
+    <span class="ua-log-status" style="background: #e0f2fe; color: #0369a1;">
+      {{ 'Session'|t('user-audit') }}
+    </span>
+    <code class="ua-log-event">{{ sessionId }}</code>
+    <span class="ua-log-time">
+      {% if ongoing %}
+        {{ 'still open'|t('user-audit') }}
+      {% elseif durationSeconds is not null %}
+        {% set days = durationSeconds // 86400 %}
+        {%- if days > 0 %}{{ days }}{{ 'd'|t('user-audit') }} {% endif -%}
+        {{ durationSeconds|date('H:i:s', 'UTC') }}
+      {% else %}
+        —
+      {% endif %}
+    </span>
+  </div>
+
+  <div class="ua-log-grid">
+
+    {# ---- Session summary ---- #}
+    <section class="ua-log-card">
+      <h2>{{ 'Overview'|t('user-audit') }}</h2>
+      <dl>
+        <dt>{{ 'User'|t('user-audit') }}</dt>
+        <dd>
+          {% if loginRow.userId %}
+            <a href="{{ cpUrl('user-audit/user/' ~ loginRow.userId) }}">
+              {{ loginRow.email ?: loginRow.userId }}
+            </a>
+          {% elseif loginRow.email %}
+            {{ loginRow.email }}
+          {% else %}
+            <span class="light">—</span>
+          {% endif %}
+        </dd>
+
+        <dt>{{ 'Started'|t('user-audit') }}</dt>
+        <dd>{{ loginRow.dateCreated|date('Y-m-d H:i:s') }}</dd>
+
+        <dt>{{ 'Ended'|t('user-audit') }}</dt>
+        <dd>
+          {% if logoutRow %}
+            {{ logoutRow.dateCreated|date('Y-m-d H:i:s') }}
+          {% else %}
+            <span class="light">{{ 'still open'|t('user-audit') }}</span>
+          {% endif %}
+        </dd>
+
+        <dt>{{ 'Duration'|t('user-audit') }}</dt>
+        <dd>
+          {% if durationSeconds is not null %}
+            {% set days = durationSeconds // 86400 %}
+            {%- if days > 0 %}{{ days }}{{ 'd'|t('user-audit') }} {% endif -%}
+            {{ durationSeconds|date('H:i:s', 'UTC') }}
+          {% else %}
+            <span class="light">—</span>
+          {% endif %}
+        </dd>
+      </dl>
+    </section>
+
+  </div>
+
+  {# ---- Timeline ---- #}
+  <section class="ua-log-card ua-log-card-wide">
+    <h2>{{ 'Timeline'|t('user-audit') }}</h2>
+    <table class="ua-session-table">
+      <thead>
+        <tr>
+          <th>{{ 'Time'|t('user-audit') }}</th>
+          <th>{{ 'Event'|t('user-audit') }}</th>
+          <th>{{ 'Context'|t('user-audit') }}</th>
+          <th>{{ 'Client'|t('user-audit') }}</th>
+          <th>{{ 'IP'|t('user-audit') }}</th>
+          <th>{{ 'Device'|t('user-audit') }}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          {% set info = statusMap[row.eventType] ?? { label: row.eventType, color: '#7c3aed', bg: '#ede9fe' } %}
+          <tr>
+            <td class="ua-session-time">{{ row.dateCreated|date('Y-m-d H:i:s') }}</td>
+            <td>
+              <span class="ua-log-status" style="background: {{ info.bg }}; color: {{ info.color }};">
+                {{ info.label }}
+              </span>
+            </td>
+            <td>{{ row.context|upper ?: '—' }}</td>
+            <td>{{ row.client ?: '—' }}</td>
+            <td>{{ row.ipAddress ?: '—' }}</td>
+            <td>{{ row.deviceType ?: '—' }}{% if row.browserName %} · {{ row.browserName }}{% endif %}</td>
+            <td>
+              {% if row.elementId %}
+                <a href="{{ cpUrl('user-audit/log/' ~ row.elementId) }}">
+                  {{ 'Detail'|t('user-audit') }} &rarr;
+                </a>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <div class="ua-log-actions">
+    <a href="{{ cpUrl('user-audit/logs') }}" class="btn">
+      &larr; {{ 'Back to logs'|t('user-audit') }}
+    </a>
+    {% if loginRow.userId %}
+      <a href="{{ cpUrl('user-audit/user/' ~ loginRow.userId) }}" class="btn submit">
+        {{ 'Show user trace'|t('user-audit') }}
+      </a>
+    {% endif %}
+  </div>
+
+</div>
+
+{% css %}
+.ua-log-detail { max-width: 1100px; }
+
+.ua-log-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+.ua-log-status {
+  padding: 0.25rem 0.65rem;
+  border-radius: 3px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ua-log-event {
+  font-size: 0.9rem;
+  color: #475569;
+  word-break: break-all;
+}
+.ua-log-time {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.ua-log-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.ua-log-card-wide { grid-column: 1 / -1; }
+
+.ua-log-card {
+  padding: 1rem 1.25rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+.ua-log-card h2 {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+.ua-log-card dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.4rem 1rem;
+  margin: 0;
+}
+.ua-log-card dt {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+.ua-log-card dd {
+  margin: 0;
+  font-size: 0.9rem;
+  word-break: break-word;
+}
+
+.ua-session-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.ua-session-table th {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 2px solid #e5e7eb;
+  color: #64748b;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ua-session-table td {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+.ua-session-time {
+  font-variant-numeric: tabular-nums;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.ua-log-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+{% endcss %}
+
+{% endblock %}

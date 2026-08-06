@@ -61,6 +61,10 @@ class ActivityLogService extends Component
      *   @var string|null      $failureReason
      *   @var string|null      $ipAddress      Override — otherwise from request.
      *   @var string|null      $userAgent      Override — otherwise from request.
+     *   @var string|null      $sessionId      v2.3+ server-issued UUID that ties
+     *                                          a login row to its logout row.
+     *                                          Persisted to its own column, NOT
+     *                                          into the metadata JSON.
      *   @var array|null       $metadata       Extra data (JSON-serialized).
      * }
      * @return bool true on success, false when the DB write fails. A
@@ -156,6 +160,17 @@ class ActivityLogService extends Component
                 $record->osVersion = $parsed['osVersion'];
                 $record->browserName = $parsed['browserName'];
                 $record->browserVersion = $parsed['browserVersion'];
+
+                // v2.3.0: session-lifecycle id. Persisted as its own
+                // column (not into the metadata JSON) so the logout
+                // hook can resolve the matching login row via an
+                // indexed lookup. The value only ever originates from
+                // StringHelper::UUID() in the login hook — never from
+                // user input — so the 36-char column cannot overflow
+                // and silently drop the row under MySQL strict mode.
+                if (isset($meta['sessionId']) && is_string($meta['sessionId']) && $meta['sessionId'] !== '') {
+                    $record->sessionId = $meta['sessionId'];
+                }
 
                 if (isset($meta['metadata']) && is_array($meta['metadata'])) {
                     $record->metadata = json_encode(
@@ -288,6 +303,65 @@ class ActivityLogService extends Component
         return (int)Craft::$app->getDb()->createCommand()
             ->delete('{{%user_activity_log}}', $conditions)
             ->execute();
+    }
+
+    // ------------------------------------------------------------------
+    // Session lifecycle (v2.3+)
+    // ------------------------------------------------------------------
+
+    /**
+     * v2.3.0: Resolves how long the session behind $sessionId has been
+     * alive, in whole seconds, by locating its originating login row
+     * and subtracting that timestamp from now.
+     *
+     * Called by the BEFORE_LOGOUT hook, which reads the sessionId back
+     * out of the Craft session and asks for the duration to stash in
+     * the logout row's `metadata.sessionDurationSeconds`.
+     *
+     * Returns null when no originating row is found — e.g. the login
+     * write itself failed (swallowed by log()'s try/catch), or this is
+     * a session id issued before the feature shipped. Callers MUST
+     * treat null as "unknown duration" and not crash.
+     *
+     * Timezone: audit rows are stored in UTC. We parse the raw column
+     * value as UTC via DateTimeHelper (assumeSystemTimeZone = false)
+     * and compare epoch timestamps, so the result is correct even on
+     * installs whose system/app timezone is not UTC — a plain
+     * strtotime() on the naive string would be off by the TZ offset.
+     */
+    public function resolveSessionDuration(string $sessionId): ?int
+    {
+        if ($sessionId === '') {
+            return null;
+        }
+
+        // Match only `login` for now. Feature 2 (impersonation) adds
+        // `impersonation_started` to this set so impersonation sessions
+        // also get a duration on logout.
+        $loginRow = UserActivityLog::find()
+            ->where([
+                'sessionId' => $sessionId,
+                'eventType' => self::EVENT_LOGIN,
+            ])
+            ->orderBy(['dateCreated' => SORT_ASC])
+            ->one();
+
+        if ($loginRow === null) {
+            return null;
+        }
+
+        $start = \craft\helpers\DateTimeHelper::toDateTime(
+            (string)$loginRow->dateCreated,
+            false,
+            false
+        );
+        if ($start === false) {
+            return null;
+        }
+
+        // Clamp at 0: clock skew or a DB/PHP timezone edge must never
+        // yield a negative duration that would break gmdate() downstream.
+        return max(0, time() - $start->getTimestamp());
     }
 
     // ------------------------------------------------------------------

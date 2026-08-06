@@ -195,6 +195,84 @@ class ActivityController extends Controller
     }
 
     /**
+     * v2.3.0: session overview — every audit row that shares one
+     * server-issued sessionId. Typically a single login plus its
+     * matching logout, but custom events logged with the same
+     * sessionId surface here too, in chronological order.
+     *
+     * Reached from the "Session" card on a logout row's detail page.
+     * The sessionId arrives via the URL rule constrained to
+     * UUID-shaped tokens ([a-f0-9-]+), so it is a safe bound value.
+     *
+     * `session_expired` rows never carry a sessionId (they are
+     * client-detected on the PWA with no server-session bearing), so
+     * they never appear on this page — by design.
+     */
+    public function actionSession(string $sessionId): Response
+    {
+        $sessionId = trim($sessionId);
+        if ($sessionId === '') {
+            throw new NotFoundHttpException(
+                Craft::t('user-audit', 'Session not found.')
+            );
+        }
+
+        $rows = UserActivityLog::find()
+            ->where(['sessionId' => $sessionId])
+            ->orderBy(['dateCreated' => SORT_ASC])
+            ->all();
+
+        if (empty($rows)) {
+            throw new NotFoundHttpException(
+                Craft::t('user-audit', 'Session not found.')
+            );
+        }
+
+        // Bookends: the login row is the earliest; the logout is the
+        // latest logout-typed row, if the session was closed cleanly.
+        $loginRow = $rows[0];
+        $logoutRow = null;
+        foreach ($rows as $r) {
+            if ($r->eventType === ActivityLogService::EVENT_LOGOUT) {
+                $logoutRow = $r;
+            }
+        }
+
+        // Duration: prefer the value the logout hook already computed
+        // and stored, so this page agrees with the row's own detail
+        // view. Fall back to deriving it from the bookend timestamps
+        // only when a logout row exists but carried no stored value
+        // (e.g. the login write had failed at logout time). An open
+        // session (no logout row) stays null — the template labels it
+        // "still open" rather than inventing a now-minus-login number.
+        $durationSeconds = null;
+        if ($logoutRow !== null && $logoutRow->metadata) {
+            $meta = json_decode($logoutRow->metadata, true);
+            if (is_array($meta) && isset($meta['sessionDurationSeconds'])) {
+                $durationSeconds = (int)$meta['sessionDurationSeconds'];
+            }
+        }
+        if ($durationSeconds === null && $logoutRow !== null) {
+            $startTs = \craft\helpers\DateTimeHelper::toDateTime((string)$loginRow->dateCreated, false, false);
+            $endTs = \craft\helpers\DateTimeHelper::toDateTime((string)$logoutRow->dateCreated, false, false);
+            if ($startTs !== false && $endTs !== false) {
+                $durationSeconds = max(0, $endTs->getTimestamp() - $startTs->getTimestamp());
+            }
+        }
+
+        return $this->renderTemplate('user-audit/session', [
+            'title' => Craft::t('user-audit', 'Session'),
+            'selectedSubnavItem' => 'logs',
+            'sessionId' => $sessionId,
+            'rows' => $rows,
+            'loginRow' => $loginRow,
+            'logoutRow' => $logoutRow,
+            'durationSeconds' => $durationSeconds,
+            'ongoing' => $logoutRow === null,
+        ]);
+    }
+
+    /**
      * Valid monitor time-window keys. Anything else in the URL is
      * silently snapped to the default ('24h').
      */
@@ -947,7 +1025,11 @@ class ActivityController extends Controller
             // BOM so Excel detects UTF-8 (without it umlauts get mangled).
             yield "\xEF\xBB\xBF";
             yield $toCsv([
-                'dateCreated', 'eventType', 'context', 'client', 'userId', 'email',
+                'dateCreated', 'eventType', 'context', 'client',
+                // v2.3.0: session-lifecycle id (empty for rows written
+                // before the feature, and for session_expired events).
+                'sessionId',
+                'userId', 'email',
                 'userGroups', 'ipAddress', 'deviceType', 'osName', 'osVersion',
                 'browserName', 'browserVersion', 'failureReason', 'userAgent',
                 // v2.0: timestamp of soft-delete (empty for live rows).
@@ -966,6 +1048,7 @@ class ActivityController extends Controller
                     $row->eventType,
                     $row->context,
                     $row->client,
+                    $row->sessionId,
                     $row->userId,
                     $row->email,
                     $row->userGroups,

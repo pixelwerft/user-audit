@@ -63,6 +63,7 @@ class AuditLog extends Element
     public string $eventType = '';
     public ?string $context = null;
     public ?string $client = null;
+    public ?string $sessionId = null;
     public ?string $failureReason = null;
     public ?string $ipAddress = null;
     public ?string $userAgent = null;

@@ -130,6 +130,37 @@
       </dl>
     </section>
 
+    {# ---- Session (v2.3) ---- #}
+    {# Rendered whenever the row carries a sessionId (login and logout
+       rows do; session_expired and CP/console rows do not). The
+       duration is only present on logout rows, where the BEFORE_LOGOUT
+       hook stored it. gmdate-style H:i:s wraps after 24h, so the day
+       component is surfaced explicitly for long sessions. #}
+    {% if element.sessionId %}
+      <section class="ua-log-card">
+        <h2>{{ 'Session'|t('user-audit') }}</h2>
+        <dl>
+          <dt>{{ 'Session ID'|t('user-audit') }}</dt>
+          <dd>
+            <a href="{{ cpUrl('user-audit/session/' ~ element.sessionId) }}"
+               title="{{ 'Show the full session'|t('user-audit') }}">
+              <code>{{ element.sessionId }}</code>
+            </a>
+          </dd>
+
+          {% if parsedMetadata and parsedMetadata.sessionDurationSeconds is defined %}
+            {% set secs = parsedMetadata.sessionDurationSeconds %}
+            {% set days = secs // 86400 %}
+            <dt>{{ 'Duration'|t('user-audit') }}</dt>
+            <dd>
+              {%- if days > 0 %}{{ days }}{{ 'd'|t('user-audit') }} {% endif -%}
+              {{ secs|date('H:i:s', 'UTC') }}
+            </dd>
+          {% endif %}
+        </dl>
+      </section>
+    {% endif %}
+
     {# ---- Network ---- #}
     <section class="ua-log-card">
       <h2>{{ 'Network'|t('user-audit') }}</h2>

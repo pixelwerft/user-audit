@@ -13,6 +13,7 @@ use craft\db\ActiveRecord;
  * @property string $eventType
  * @property string|null $context
  * @property string|null $client
+ * @property string|null $sessionId v2.3+ server-issued UUID linking login↔logout
  * @property string|null $failureReason
  * @property string|null $ipAddress
  * @property string|null $userAgent
