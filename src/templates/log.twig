@@ -230,6 +230,26 @@
       </section>
     {% endif %}
 
+    {# ---- Risk score (v2.3) ---- #}
+    {# Shown on login rows the scorer flagged (riskScore >= 1). The
+       score is stored in metadata alongside the individual signals. #}
+    {% if element.eventType == 'login' and parsedMetadata and parsedMetadata.riskScore is defined and parsedMetadata.riskScore >= 1 %}
+      {% set rs = parsedMetadata.riskScore %}
+      <section class="ua-log-card ua-log-card-wide">
+        <h2>{{ 'Risk score'|t('user-audit') }}</h2>
+        <div class="ua-risk-head">
+          <span class="ua-risk-score {{ rs >= 3 ? 'ua-risk-high' : 'ua-risk-low' }}">{{ rs }}<span class="ua-risk-max">/5</span></span>
+          <div class="ua-risk-signals">
+            {% for sig in parsedMetadata.riskSignals|default([]) %}
+              <span class="ua-risk-chip">{{ sig }}</span>
+            {% else %}
+              <span class="light">—</span>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+    {% endif %}
+
     {# ---- Impersonation (v2.3) ---- #}
     {% if element.eventType in ['impersonation_started', 'impersonation_stopped'] %}
       <section class="ua-log-card">
@@ -280,7 +300,9 @@
 
     {# ---- Metadata (raw payload — fallback for events without a
        dedicated card above) ---- #}
-    {% if parsedMetadata and element.eventType not in ['password_changed', 'impersonation_started', 'impersonation_stopped'] %}
+    {% if parsedMetadata
+        and element.eventType not in ['password_changed', 'impersonation_started', 'impersonation_stopped']
+        and not (element.eventType == 'login' and parsedMetadata.riskScore is defined) %}
       <section class="ua-log-card ua-log-card-wide">
         <h2>{{ 'Metadata'|t('user-audit') }}</h2>
         <pre class="ua-log-meta">{{ parsedMetadata|json_encode(constant('JSON_PRETTY_PRINT') b-or constant('JSON_UNESCAPED_UNICODE') b-or constant('JSON_UNESCAPED_SLASHES')) }}</pre>
@@ -450,6 +472,42 @@
   margin: 0.5rem 0 0;
   font-size: 0.85rem;
   color: #64748b;
+}
+
+/* v2.3: risk score card. Big score number + signal chips. High
+   (>=3) is red, a low-but-nonzero score is amber. */
+.ua-risk-head {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.ua-risk-score {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0.35rem 0.7rem;
+  border-radius: 6px;
+}
+.ua-risk-score .ua-risk-max {
+  font-size: 0.9rem;
+  font-weight: 500;
+  opacity: 0.6;
+}
+.ua-risk-high { background: #fee2e2; color: #b91c1c; }
+.ua-risk-low  { background: #fef3c7; color: #b45309; }
+.ua-risk-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.ua-risk-chip {
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  font-size: 0.8rem;
+  color: #475569;
 }
 {% endcss %}
 

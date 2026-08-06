@@ -287,6 +287,9 @@ class AuditLog extends Element
             'osName'           => ['label' => Craft::t('user-audit', 'OS')],
             'browserName'      => ['label' => Craft::t('user-audit', 'Browser')],
             'failureReason'    => ['label' => Craft::t('user-audit', 'Reason')],
+            // v2.3: risk score — off by default, opt-in via the column
+            // picker. Read from the row's metadata JSON.
+            'riskScore'        => ['label' => Craft::t('user-audit', 'Risk')],
         ];
     }
 
@@ -435,6 +438,26 @@ class AuditLog extends Element
                     return '—';
                 }
                 return Html::encode($this->browserName . ($this->browserVersion ? ' ' . $this->browserVersion : ''));
+
+            case 'riskScore':
+                // v2.3: read the score out of the metadata JSON. Only
+                // login rows carry one, and only when it was >= 1.
+                if (!$this->metadata) {
+                    return '<span class="light">—</span>';
+                }
+                $meta = json_decode($this->metadata, true);
+                $score = is_array($meta) ? ($meta['riskScore'] ?? null) : null;
+                if ($score === null) {
+                    return '<span class="light">—</span>';
+                }
+                $high = (int)$score >= 3;
+                return Html::tag('span', '⚠ ' . (int)$score, [
+                    'style' => 'padding: 0.05rem 0.4rem; border-radius: 3px; font-size: 0.75rem; font-weight: 600;'
+                        . ($high ? 'background: #fee2e2; color: #b91c1c;' : 'background: #fef3c7; color: #b45309;'),
+                    'title' => is_array($meta) && !empty($meta['riskSignals'])
+                        ? implode(', ', (array)$meta['riskSignals'])
+                        : '',
+                ]);
 
             default:
                 $value = $this->$attribute ?? null;

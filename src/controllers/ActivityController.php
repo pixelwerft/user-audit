@@ -91,13 +91,16 @@ class ActivityController extends Controller
         // v2.1: opt-in checkbox to include soft-deleted (rotated)
         // rows. Off by default so the index focuses on live activity.
         $includeArchive = (string)$request->getQueryParam('archive', '') === '1';
+        // v2.3: opt-in checkbox to show only suspicious logins
+        // (risk score >= 3).
+        $riskOnly = (string)$request->getQueryParam('risk', '') === '1';
 
         // Live filter: only apply the search string from 2 characters
         // onwards, so individual keystrokes don't immediately trigger
         // a full table scan.
         $effectiveQ = mb_strlen($q) >= 2 ? $q : '';
 
-        $query = $this->buildQuery($eventType, $effectiveQ, $context, $client, $sort, $dir);
+        $query = $this->buildQuery($eventType, $effectiveQ, $context, $client, $sort, $dir, $riskOnly);
 
         // Soft-delete filter: LEFT JOIN elements so we can read
         // dateDeleted onto the row (for the "Archive" badge in the
@@ -148,6 +151,7 @@ class ActivityController extends Controller
             'sort' => $sort,
             'dir' => $dir,
             'includeArchive' => $includeArchive,
+            'riskOnly' => $riskOnly,
         ]);
     }
 
@@ -978,8 +982,9 @@ class ActivityController extends Controller
         $client = (string)$request->getQueryParam('client', '');
         $q = trim((string)$request->getQueryParam('q', ''));
         $effectiveQ = mb_strlen($q) >= 2 ? $q : '';
+        $riskOnly = (string)$request->getQueryParam('risk', '') === '1';
 
-        $query = $this->buildQuery($eventType, $effectiveQ, $context, $client);
+        $query = $this->buildQuery($eventType, $effectiveQ, $context, $client, 'dateCreated', 'desc', $riskOnly);
 
         // v2.0: pick up elements.dateDeleted for the new `deleted_at`
         // CSV column. Soft-deleted rows stay in the export so that
@@ -1092,7 +1097,8 @@ class ActivityController extends Controller
         string $context = '',
         string $client = '',
         string $sort = 'dateCreated',
-        string $dir = 'desc'
+        string $dir = 'desc',
+        bool $risk = false
     ): \yii\db\ActiveQuery {
         if (!in_array($sort, self::SORTABLE_COLUMNS, true)) {
             $sort = 'dateCreated';
@@ -1118,6 +1124,17 @@ class ActivityController extends Controller
 
         if ($eventType !== '') {
             $query->andWhere(["{$rawTable}.eventType" => $eventType]);
+        }
+        if ($risk) {
+            // v2.3.0: "suspicious only" — rows whose stored risk score
+            // is >= 3. Driver-detected JSON extraction (MySQL/MariaDB
+            // JSON_EXTRACT vs Postgres ->>). Rows without a score have
+            // NULL metadata → excluded automatically.
+            $expr = ActivityLogService::riskScoreSqlExpr(
+                Craft::$app->getDb(),
+                "[[{$rawTable}.metadata]]"
+            );
+            $query->andWhere(new \yii\db\Expression("{$expr} >= 3"));
         }
         if ($context !== '') {
             $query->andWhere(["{$rawTable}.context" => $context]);

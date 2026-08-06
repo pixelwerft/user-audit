@@ -370,6 +370,138 @@ class ActivityLogService extends Component
     }
 
     // ------------------------------------------------------------------
+    // Suspicious-activity score (v2.3+)
+    // ------------------------------------------------------------------
+
+    /**
+     * v2.3.0: Computes a 0..5 risk score for a login from five
+     * independent signals, each contributing +1. Meant to be called
+     * from the AFTER_LOGIN hook for genuine logins only (not
+     * impersonation or password changes) and stored on the row as
+     * metadata.riskScore + metadata.riskSignals.
+     *
+     * Signals:
+     *   new_location         — no successful login from this IP for
+     *                          this user in the last 90 days.
+     *   unusual_hour         — fewer than 3 prior logins in this exact
+     *                          weekday×hour slot over the last 90 days.
+     *   new_device           — no prior login with this
+     *                          deviceType+browserName combo in 90 days.
+     *   preceded_by_failures — at least one login_failed from this IP
+     *                          or login name in the last 15 minutes.
+     *   ip_blacklist         — this IP produced login_failed for 3+
+     *                          distinct users in the last 30 days.
+     *
+     * All five sub-queries hit existing indexes (userId, eventType,
+     * ipAddress, dateCreated). A brand-new user's first login legit-
+     * imately trips new_location + unusual_hour + new_device — the
+     * signal list makes that transparent to the reviewer.
+     *
+     * @return array{score:int, signals:string[]}
+     */
+    public function computeRiskScore(
+        int $userId,
+        ?string $ip,
+        ?string $deviceType,
+        ?string $browserName,
+        ?string $email = null
+    ): array {
+        $signals = [];
+        $db = Craft::$app->getDb();
+        $cutoff90 = (new \DateTime('-90 days'))->format('Y-m-d H:i:s');
+
+        // 1. new_location — reuses the existing 90-day IP check.
+        if ($this->isNewLocation($userId, $ip, 90)) {
+            $signals[] = 'new_location';
+        }
+
+        // 2. unusual_hour — weekday×hour histogram slot for "now".
+        // Driver-specific weekday/hour extraction, aligned to PHP's
+        // ISO-N (1=Mon..7=Sun) the same way the user-trace heatmap is.
+        $now = new \DateTime();
+        $nowDow = (int)$now->format('N');
+        $nowHour = (int)$now->format('G');
+        if ($db->getDriverName() === 'pgsql') {
+            $dowExpr = 'EXTRACT(ISODOW FROM [[dateCreated]])::int';
+            $hourExpr = 'EXTRACT(HOUR FROM [[dateCreated]])::int';
+        } else {
+            $dowExpr = '(WEEKDAY([[dateCreated]]) + 1)';
+            $hourExpr = 'HOUR([[dateCreated]])';
+        }
+        $slotCount = (int)(new \yii\db\Query())
+            ->from('{{%user_activity_log}}')
+            ->where(['userId' => $userId, 'eventType' => self::EVENT_LOGIN])
+            ->andWhere(['>=', 'dateCreated', $cutoff90])
+            ->andWhere(new \yii\db\Expression(
+                "$dowExpr = :dow AND $hourExpr = :hr",
+                [':dow' => $nowDow, ':hr' => $nowHour]
+            ))
+            ->count();
+        if ($slotCount < 3) {
+            $signals[] = 'unusual_hour';
+        }
+
+        // 3. new_device — deviceType+browserName combo unseen in 90d.
+        // Skip when there is no UA at all (both null) — nothing to
+        // assess, and it would false-positive on every API/console
+        // style login.
+        if ($deviceType !== null || $browserName !== null) {
+            $seen = (int)(new \yii\db\Query())
+                ->from('{{%user_activity_log}}')
+                ->where(['userId' => $userId, 'eventType' => self::EVENT_LOGIN])
+                ->andWhere(['>=', 'dateCreated', $cutoff90])
+                ->andWhere(['deviceType' => $deviceType, 'browserName' => $browserName])
+                ->count();
+            if ($seen === 0) {
+                $signals[] = 'new_device';
+            }
+        }
+
+        // 4. preceded_by_failures — recent failures from this IP/email.
+        $fails = $this->countRecentFailures($ip, $email, 15);
+        if (($fails['ip'] ?? 0) >= 1 || ($fails['email'] ?? 0) >= 1) {
+            $signals[] = 'preceded_by_failures';
+        }
+
+        // 5. ip_blacklist — this IP failed against 3+ distinct users
+        // in 30 days (spray / credential stuffing). COUNT(DISTINCT
+        // userId) ignores the NULL userIds of unknown-login-name
+        // failures automatically.
+        if ($ip !== null && $ip !== '') {
+            $cutoff30 = (new \DateTime('-30 days'))->format('Y-m-d H:i:s');
+            $distinctUsers = (int)(new \yii\db\Query())
+                ->from('{{%user_activity_log}}')
+                ->where(['eventType' => self::EVENT_LOGIN_FAILED, 'ipAddress' => $ip])
+                ->andWhere(['>=', 'dateCreated', $cutoff30])
+                ->count('DISTINCT [[userId]]');
+            if ($distinctUsers >= 3) {
+                $signals[] = 'ip_blacklist';
+            }
+        }
+
+        return ['score' => count($signals), 'signals' => $signals];
+    }
+
+    /**
+     * v2.3.0: Returns a driver-appropriate SQL fragment that extracts
+     * `metadata.riskScore` as an integer (or NULL when absent), for use
+     * in WHERE / ORDER BY / SELECT. MySQL/MariaDB have JSON_EXTRACT;
+     * Postgres uses the json ->> operator. NULL metadata yields NULL on
+     * both, so it never errors on rows without a stored score.
+     *
+     * $column must already be a safe, quoted column reference (e.g.
+     * '[[metadata]]' or '[[user_activity_log.metadata]]') — it is
+     * interpolated raw, so never pass user input.
+     */
+    public static function riskScoreSqlExpr(\yii\db\Connection $db, string $column = '[[metadata]]'): string
+    {
+        if ($db->getDriverName() === 'pgsql') {
+            return "({$column}::json ->> 'riskScore')::int";
+        }
+        return "CAST(JSON_EXTRACT({$column}, '$.riskScore') AS UNSIGNED)";
+    }
+
+    // ------------------------------------------------------------------
     // Password-change strength flow (v2.2+)
     // ------------------------------------------------------------------
     //

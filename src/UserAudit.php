@@ -365,6 +365,41 @@ class UserAudit extends Plugin
                         );
                     }
 
+                    // v2.3.0: suspicious-activity score — genuine
+                    // logins only (not impersonation, which is
+                    // admin-initiated and would score noisily). Five
+                    // indexed sub-queries; failure must never break
+                    // login, and a 0 score is left out of metadata so
+                    // ordinary logins keep an empty metadata payload.
+                    if ($eventType === ActivityLogService::EVENT_LOGIN && $userId !== null) {
+                        try {
+                            $request = Craft::$app->getRequest();
+                            $ip = $request instanceof \craft\web\Request
+                                ? $request->getUserIP()
+                                : null;
+                            $ua = $request instanceof \craft\web\Request
+                                ? $request->getUserAgent()
+                                : null;
+                            $parsed = $this->userAgentParser->parse($ua);
+                            $risk = $this->activityLog->computeRiskScore(
+                                $userId,
+                                $ip,
+                                $parsed['deviceType'],
+                                $parsed['browserName'],
+                                $identity?->email
+                            );
+                            if ($risk['score'] > 0) {
+                                $extraMeta['riskScore'] = $risk['score'];
+                                $extraMeta['riskSignals'] = $risk['signals'];
+                            }
+                        } catch (\Throwable $e) {
+                            Craft::error(
+                                '[user-audit] risk score failed: ' . $e->getMessage(),
+                                __CLASS__
+                            );
+                        }
+                    }
+
                     $logMeta = [
                         'email' => $identity?->email,
                         'userGroups' => $groups,

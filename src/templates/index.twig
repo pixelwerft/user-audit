@@ -121,15 +121,25 @@
         </label>
       </div>
       <div>
+        <label class="ua-archive-toggle" title="{{ 'Show only logins flagged with a risk score of 3 or higher.'|t('user-audit') }}">
+          <input type="checkbox"
+                 name="risk"
+                 value="1"
+                 {% if riskOnly %}checked{% endif %}
+                 data-ua-live-select>
+          <span>{{ 'Suspicious only'|t('user-audit') }}</span>
+        </label>
+      </div>
+      <div>
         <button type="submit" class="btn submit">{{ 'Filter'|t('user-audit') }}</button>
       </div>
-      {% if q or eventType or context or client or includeArchive %}
+      {% if q or eventType or context or client or includeArchive or riskOnly %}
         <div>
           <a href="{{ cpUrl('user-audit/logs') }}" class="btn">{{ 'Reset'|t('user-audit') }}</a>
         </div>
       {% endif %}
       <div>
-        <a href="{{ cpUrl('user-audit/export', { q: q, event: eventType, context: context, client: client }) }}"
+        <a href="{{ cpUrl('user-audit/export', { q: q, event: eventType, context: context, client: client, risk: riskOnly ? '1' : null }) }}"
            class="btn">
           {{ 'Export CSV'|t('user-audit') }}
         </a>
@@ -141,7 +151,7 @@
   </form>
 </div>
 
-{% set sortBaseQuery = { q: q, event: eventType, context: context, client: client, archive: includeArchive ? '1' : null } %}
+{% set sortBaseQuery = { q: q, event: eventType, context: context, client: client, archive: includeArchive ? '1' : null, risk: riskOnly ? '1' : null } %}
 
 <div class="ua-table-scroll">
   <div class="tableview">
@@ -184,6 +194,14 @@
               {{ pill.label }}
             </span>
             <code style="margin-left: 0.4rem; font-size: 0.7rem; color: #64748b;">{{ row.eventType }}</code>
+            {# v2.3: risk badge on login rows that scored >= 1. #}
+            {% set md = row.metadata ? row.metadata|json_decode : null %}
+            {% if md and md.riskScore is defined and md.riskScore >= 1 %}
+              <span title="{{ 'Risk signals'|t('user-audit') }}: {{ md.riskSignals|default([])|join(', ') }}"
+                    style="display: inline-block; margin-left: 0.4rem; padding: 0.05rem 0.35rem; border-radius: 3px; font-size: 0.7rem; font-weight: 600; background: {{ md.riskScore >= 3 ? '#fee2e2' : '#fef3c7' }}; color: {{ md.riskScore >= 3 ? '#b91c1c' : '#b45309' }};">
+                ⚠ {{ md.riskScore }}
+              </span>
+            {% endif %}
           </td>
           <td>
             {% if row.context == 'cp' %}
@@ -250,7 +268,7 @@
 
 {% if pageCount > 1 %}
   <nav class="pagination" style="margin-top: 1rem;">
-    {% set baseQuery = { q: q, event: eventType, context: context, client: client, sort: sort, dir: dir, archive: includeArchive ? '1' : null } %}
+    {% set baseQuery = { q: q, event: eventType, context: context, client: client, sort: sort, dir: dir, archive: includeArchive ? '1' : null, risk: riskOnly ? '1' : null } %}
     {% if page > 1 %}
       <a class="btn" href="{{ cpUrl('user-audit/logs', baseQuery|merge({ page: page - 1 })) }}">&larr; {{ 'Previous'|t('user-audit') }}</a>
     {% endif %}
