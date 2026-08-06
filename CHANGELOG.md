@@ -3,6 +3,27 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2.2.3 - 2026-08-06
+
+### Fixed
+- `userGroups` column stayed empty on `logout` rows even though the
+  same user's `login` row filled it — the AFTER_LOGOUT hook simply
+  never asked for groups. `$event->identity` is still populated at
+  that point (Craft fires AFTER_LOGOUT before the session actually
+  clears), so the data was available all along. The hook now
+  snapshots groups the same way the login hook does. Filtering the
+  logs by group now covers the full lifecycle of a session.
+
+### Changed
+- Extracted the group-snapshot logic from the AFTER_LOGIN hook into
+  a private `snapshotUserGroups(?User): ?string` helper on the
+  plugin class, applied in all four hooks that resolve a user
+  identity: login, logout, login-failed (when the login name
+  matched a real user) and password-changed. Snapshot semantics:
+  each row records the groups at the exact time of the event, so
+  a group change between login and logout leaves an audit trail
+  in the differing `userGroups` columns of the two rows.
+
 ## 2.2.2 - 2026-06-12
 
 ### Fixed

@@ -11,6 +11,7 @@ Format-Vorgabe: [behavior.md](../../apps/code-with-claude/topics/behavior.md#inp
 
 ## Erledigt
 
+- [x] **v2.2.3 — `userGroups`-Snapshot auf allen Auth-Hooks konsistent.** Logout-Rows hatten leere Groups-Spalte weil AFTER_LOGOUT nie snapshottete. `snapshotUserGroups()`-Helper in Plugin-Klasse extrahiert, in login/logout/login_failed/password_changed angewendet. Erledigt 2026-08-06
 - [x] **v2.2.0 — Password-Change-Logging** mit Stärke-Klassifikationen ohne Plaintext-Persistenz. BEFORE_SAVE captureed, AFTER_SAVE schreibt Audit-Row. Neuer Status `pwd_changed` (violet), Source-Sidebar-Item, Monitor-Linie, Detail-Karte. Settings-Toggle `recordPasswordChanges`. Translation-Parität sauber — erledigt 2026-06-12
 - [x] **Recovery 2. Datenverlust-Vorfall:** Plugin-Repo via `git clone` aus GitHub wiederhergestellt (v2.1.2 als Start), Bind-Mount-Footgun entfernt, ddev-router via `docker restart` healthy gemacht. Bind-Mount bleibt für v2.x-Arbeit off — erledigt 2026-06-12
 - [x] **v2.1.0 — UI-Walk-Back auf v1.x-Filter-Bar mit Status-Pills aus v2.0** — adressiert (a) Slow-Load durch Element-Index-Joins und (b) verlorene Filter-Bar oben. Element-Layer (elementId, Soft-Delete, Hard-Purge, CSV-deleted_at, Detail-Seite) bleibt komplett. Such-Index für AuditLog abgeschaltet — entlastet auch das Logging — erledigt 2026-05-05

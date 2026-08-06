@@ -35,6 +35,11 @@ Aktuell keine konkreten Major-Themen geplant. Wenn ein klarer architektureller S
 
 ## Erledigt
 
+### v2.2.3 — 2026-08-06
+
+- `snapshotUserGroups()`-Helper eingeführt und in allen vier Auth-Hooks angewendet (login, logout, login_failed, password_changed). Fixt die leere `userGroups`-Spalte bei Logout-Rows — Daten waren am Hook-Event zwar verfügbar, wurden aber nicht gesnapshottet
+- Snapshot-Semantik dokumentiert: jede Row zeigt Groups zum Event-Zeitpunkt (Group-Änderung zwischen Login und Logout ist forensisch nachvollziehbar)
+
 ### v2.2.0 — 2026-06-12
 
 - Password-Change-Logging mit BEFORE_SAVE/AFTER_SAVE-Hooks auf dem User-Element
