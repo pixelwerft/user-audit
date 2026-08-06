@@ -3,6 +3,68 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2.3.0 - 2026-08-06
+
+Four independent features plus the schema change they build on. Additive
+throughout — existing rows, queries and API consumers are unaffected.
+
+### Added
+- **Session lifecycle & duration.** Each login is issued a server-side
+  session id (`StringHelper::UUID()`) stashed in the Craft session and
+  written to a new `sessionId` column. The logout hook reads it back and
+  stores `metadata.sessionDurationSeconds`. New session-overview page
+  `/user-audit/session/<id>` lists every row that shared a session; the
+  detail view gains a Session card; the CSV export gains a `sessionId`
+  column. `session_expired` events carry no session id by design
+  (client-detected on the PWA, no server session to bind).
+- **Impersonation logging.** New `impersonation_started` /
+  `impersonation_stopped` events. Start is detected via Craft's
+  `getImpersonator()` in the login hook (records `impersonatorId`); stop
+  via a self-managed session marker on return (records
+  `wasImpersonatingUserId`). New amber "Impersonation" status wired
+  through the element, query, monitor and templates. New-location alert
+  mail is suppressed for impersonation logins.
+- **Suspicious-activity score.** Every genuine login is scored 0–5 from
+  five signals — `new_location`, `unusual_hour`, `new_device`,
+  `preceded_by_failures`, `ip_blacklist` — stored as `metadata.riskScore`
+  + `metadata.riskSignals` (only when > 0). The Logs index gains a
+  "Suspicious only" filter (risk score ≥ 3) and a per-row risk badge; the
+  detail view a risk-score card; the element index an opt-in "Risk"
+  column. JSON extraction is driver-detected (MySQL/MariaDB vs Postgres).
+- **User self-service view.** Logged-in users can review their own last
+  30 events at `user-audit/my-activity` in the CP and — via a new site
+  route + site template root — on the front end. New `craft.userAudit`
+  Twig variable and an embeddable
+  `user-audit/_widgets/my_activity_snippet`. The `activity/my-recent`
+  JSON endpoint gains additive `sessionId`, `sessionDurationSeconds` and
+  `riskScore` fields.
+
+### Changed
+- **Logout hook moved from `EVENT_AFTER_LOGOUT` to `EVENT_BEFORE_LOGOUT`.**
+  `AFTER_LOGOUT` fires after the session is destroyed, where the stashed
+  session id is already gone; `BEFORE_LOGOUT` still has both the identity
+  and the session data, which the duration correlation needs.
+- **`schemaVersion` bumped 2.0.0 → 2.3.0.** Runtime now writes the
+  `sessionId` column on every login, so the `m260806` migration must run.
+  The bump makes Craft flag and run it during a normal `composer update`
+  instead of relying on a manual `craft up`; a missed migration would
+  otherwise silently drop audit writes (the write is try/catch-guarded,
+  so authentication is never affected).
+
+### Migration
+- `m260806_120000_add_session_id_column` — adds `sessionId VARCHAR(36)`
+  (nullable, indexed). Idempotent (schema + column-exists checks); safe
+  to re-run. Fresh installs get the column from `Install.php`. On MySQL/
+  MariaDB the column lands after `client`; on PostgreSQL it is appended
+  at the end (cosmetic only — all access is by column name).
+
+### Notes
+- Duration is computed by parsing the UTC-stored login timestamp via
+  `DateTimeHelper` and comparing epoch seconds, so it is correct on
+  installs whose app timezone is not UTC.
+- Every touched class passed the `php -l` + class-load/LSP check the
+  v2.2.4 note introduced; the risk-score SQL was verified against MySQL 8.
+
 ## 2.2.4 - 2026-08-06
 
 ### Fixed

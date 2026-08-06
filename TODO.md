@@ -5,12 +5,14 @@ Format-Vorgabe: [behavior.md](../../apps/code-with-claude/topics/behavior.md#inp
 
 ## Offen
 
-- [ ] **v2.3.0 — optionales Geo-Logging.** Spec in [ROADMAP.md → v2.3.0](ROADMAP.md). Wartet auf Implementations-Go (erfasst 2026-06-12)
+- [ ] **v2.3.0 Production-Verifikation (post-Push).** Nach Composer-Update + `craft up` prüfen: `m260806`-Migration läuft sauber, `sessionId`-Spalte existiert. Login→Logout schreibt Duration in `metadata.sessionDurationSeconds`. Impersonation-Start/-Stop werden korrekt geloggt. Risk-Score erscheint bei auffälligen Logins; "Suspicious only"-Filter + Badge funktionieren. `user-audit/my-activity` rendert CP **und** FE; Snippet-Include funktioniert auf einer Kundensite. Kein Fehler in den Craft-Logs (erfasst 2026-08-06)
+- [ ] **v2.4.0 — optionales Geo-Logging.** Spec in [ROADMAP.md → v2.4.0](ROADMAP.md). Wartet auf Implementations-Go (erfasst 2026-06-12, von v2.3.0 verschoben)
 - [ ] In Production testen: v2.2.0 Hooks feuern bei Passwort-Setzung, Strength-Karte rendert sauber, Self vs. Admin-Triggered korrekt unterschieden, `recordPasswordChanges`-Toggle schaltet beide Hooks weg (erfasst 2026-06-12, post-Push-Verifikation)
 - [ ] Bind-Mount im Test-Projekt **bleibt off**. v2.x-Iteration läuft komplett via Tag-Push-Composer-Update (erfasst 2026-06-12 nach 2. Vorfall)
 
 ## Erledigt
 
+- [x] **v2.3.0 — vier Features implementiert** (Session-Lifecycle+Duration, Impersonation-Logging, Suspicious-Score, Self-Service-View) als saubere Einzel-Commits, jeweils mit php -l + Class-Load-Check + (Feature 3) DB-Ausdruck-Sanity grün. `schemaVersion` 2.0.0→2.3.0. Doku (README/CHANGELOG/ROADMAP/TODO) nachgezogen. Geo auf v2.4.0 verschoben — erledigt 2026-08-06
 - [x] **v2.2.3 — `userGroups`-Snapshot auf allen Auth-Hooks konsistent.** Logout-Rows hatten leere Groups-Spalte weil AFTER_LOGOUT nie snapshottete. `snapshotUserGroups()`-Helper in Plugin-Klasse extrahiert, in login/logout/login_failed/password_changed angewendet. Erledigt 2026-08-06
 - [x] **v2.2.0 — Password-Change-Logging** mit Stärke-Klassifikationen ohne Plaintext-Persistenz. BEFORE_SAVE captureed, AFTER_SAVE schreibt Audit-Row. Neuer Status `pwd_changed` (violet), Source-Sidebar-Item, Monitor-Linie, Detail-Karte. Settings-Toggle `recordPasswordChanges`. Translation-Parität sauber — erledigt 2026-06-12
 - [x] **Recovery 2. Datenverlust-Vorfall:** Plugin-Repo via `git clone` aus GitHub wiederhergestellt (v2.1.2 als Start), Bind-Mount-Footgun entfernt, ddev-router via `docker restart` healthy gemacht. Bind-Mount bleibt für v2.x-Arbeit off — erledigt 2026-06-12

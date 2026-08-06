@@ -4,7 +4,11 @@ Strategische, versionsbezogene Sicht. Taktischer Posteingang: [TODO.md](TODO.md)
 Format-Vorgabe: [behavior.md](../../apps/code-with-claude/topics/behavior.md#roadmap-während-der-entwicklung-führen).
 Versionierung: 10–30 Patches pro Increment bündeln (siehe [git.md](../../apps/code-with-claude/topics/git.md#versionierung)).
 
-## v2.3.0 — geplant: optionales Geo-Logging
+## v2.4.0 — geplant: optionales Geo-Logging
+
+(Ursprünglich als v2.3.0 geplant — v2.3.0 wurde stattdessen für die vier
+Security-/Self-Service-Features verwendet, siehe Erledigt-Block. Geo
+rückt damit auf v2.4.0.)
 
 Opt-in pro Setting + per-User-Consent über ein konfigurierbares Custom-Field-Handle. Vollständige Spec:
 
@@ -34,6 +38,16 @@ Mögliche Kandidaten (nicht zugesagt):
 Aktuell keine konkreten Major-Themen geplant. Wenn ein klarer architektureller Sprung sichtbar wird, hier eintragen.
 
 ## Erledigt
+
+### v2.3.0 — 2026-08-06
+
+Vier unabhängige Features (Geo auf v2.4.0 verschoben):
+
+- **Session-Lifecycle + Duration.** Server-issued sessionId (Migration `m260806`) verknüpft Login↔Logout; BEFORE_LOGOUT-Refactor (AFTER_LOGOUT feuert nach Session-Destroy); Duration UTC-korrekt via `DateTimeHelper`; Session-Overview-Page, Detail-Card, CSV-Spalte
+- **Impersonation-Logging.** `impersonation_started`/`_stopped` via `getImpersonator()` + self-managed Session-Marker; amber Status an allen fünf Stellen; New-Location-Mail bei Impersonation unterdrückt
+- **Suspicious-Score.** 5-Signal-Score (0–5) nur bei echten Logins in `metadata.riskScore`/`riskSignals`; Index-Filter "Suspicious only" + Risk-Badge; Detail-Card; opt-in Element-Spalte; JSON-Extraktion driver-detected (MySQL/Postgres)
+- **Self-Service-View.** `user-audit/my-activity` CP+FE (Site-Template-Root), `craft.userAudit`-Twig-Variable + einbettbares Snippet, `my-recent`-JSON additiv um sessionId/duration/riskScore erweitert
+- **schemaVersion** 2.0.0 → 2.3.0, damit die sessionId-Migration im normalen Update-Flow läuft (Runtime hängt jetzt an der Spalte)
 
 ### v2.2.3 — 2026-08-06
 
