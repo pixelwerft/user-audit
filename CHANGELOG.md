@@ -3,6 +3,29 @@
 All notable changes to this plugin are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2.2.4 - 2026-08-06
+
+### Fixed
+- `AuditLogQuery` failed to load with
+  `Type of pixelwerft\\useraudit\\elements\\db\\AuditLogQuery::$search
+  must be mixed (as in class craft\\elements\\db\\ElementQuery)` —
+  our stricter `public ?string $search = null` shadowed Crafts
+  parent `public mixed $search` and PHP rejects the LSP
+  violation at class-load time. Broke the audit detail view
+  (`/admin/user-audit/log/<id>`) because it instantiates the
+  query. Renamed our free-text-search property + setter to
+  `$textSearch` / `textSearch()` so we no longer shadow the
+  parent's search-index integration at all — the two are
+  semantically different (parent triggers Craft search index;
+  ours does a plain SQL LIKE chain).
+
+### Notes
+- `php -l` does NOT catch LSP violations — only syntax errors —
+  so the v2.2.2 lint discipline missed this. The stronger check
+  is `php -r "new <Class>(...)"`, which actually loads the class
+  hierarchy and triggers the LSP validator. Adding that as a
+  follow-up standard.
+
 ## 2.2.3 - 2026-08-06
 
 ### Fixed
